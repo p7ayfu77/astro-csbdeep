@@ -14,7 +14,6 @@ from ..io import save_training_data
 from .transform import Transform, permute_axes, broadcast_target
 
 
-
 ## Patch filter
 
 def no_background_patches(threshold=0.4, percentile=99.9):
@@ -61,11 +60,9 @@ def no_background_patches(threshold=0.4, percentile=99.9):
         return filtered > threshold * np.percentile(image,percentile)
     return _filter
 
-
-
 ## Sample patches
 
-def sample_patches_from_multiple_stacks(datas, patch_size, n_samples, datas_mask=None, patch_filter=None, verbose=False):
+def sample_patches_from_multiple_stacks(datas, patch_size, n_samples, datas_mask=None, patch_filter=None, verbose=False, overlap=True):
     """ sample matching patches of size `patch_size` from all arrays in `datas` """
 
     # TODO: some of these checks are already required in 'create_patches'
@@ -92,18 +89,20 @@ def sample_patches_from_multiple_stacks(datas, patch_size, n_samples, datas_mask
 
     # get the valid indices
 
-    border_slices = tuple([slice(s // 2, d - s + s // 2 + 1) for s, d in zip(patch_size, datas[0].shape)])
+    border_slices = tuple([slice(s // 2, d - s + s // 2 + 1, s if not overlap else None) for s, d in zip(patch_size, datas[0].shape)])
     valid_inds = np.where(patch_mask[border_slices])
     n_valid = len(valid_inds[0])
 
     if n_valid == 0:
         raise ValueError("'patch_filter' didn't return any region to sample from")
+    if n_samples > n_valid:
+        raise ValueError("'n_samples' is greater than the number of valid regions to sample from")
 
-    sample_inds = choice(range(n_valid), n_samples, replace=(n_valid < n_samples))
+    sample_inds = range(n_samples) if not overlap else choice(range(n_valid), n_samples, replace=(n_valid < n_samples))
 
     # valid_inds = [v + s.start for s, v in zip(border_slices, valid_inds)] # slow for large n_valid
     # rand_inds = [v[sample_inds] for v in valid_inds]
-    rand_inds = [v[sample_inds] + s.start for s, v in zip(border_slices, valid_inds)]
+    rand_inds = [v[sample_inds]*s.step + s.start for s, v in zip(border_slices, valid_inds)]
 
     # res = [np.stack([data[r[0] - patch_size[0] // 2:r[0] + patch_size[0] - patch_size[0] // 2,
     #                  r[1] - patch_size[1] // 2:r[1] + patch_size[1] - patch_size[1] // 2,
@@ -113,8 +112,6 @@ def sample_patches_from_multiple_stacks(datas, patch_size, n_samples, datas_mask
     res = [np.stack([data[tuple(slice(_r-(_p//2),_r+_p-(_p//2)) for _r,_p in zip(r,patch_size))] for r in zip(*rand_inds)]) for data in datas]
 
     return res
-
-
 
 ## Create training data
 
@@ -161,7 +158,6 @@ def sample_percentiles(pmin=(1,3), pmax=(99.5,99.9)):
     _valid_low_high_percentiles(pmax) or _raise(ValueError(pmax))
     pmin[1] < pmax[0] or _raise(ValueError())
     return lambda: (np.random.uniform(*pmin), np.random.uniform(*pmax))
-
 
 def norm_percentiles(percentiles=sample_percentiles(), relu_last=False):
     """Normalize extracted patches based on percentiles from corresponding raw image.
@@ -211,6 +207,33 @@ def norm_percentiles(percentiles=sample_percentiles(), relu_last=False):
 
     return _normalize
 
+def norm_reinhard(normalize_targets=False):
+    """Normalize extracted patches based on modified Reinhard formula from: `Noise2Noise: Learning Image Restoration without Clean Data`
+    https://arxiv.org/abs/1803.04189
+    Best suited to HDR images
+
+    Parameters
+    ----------
+    normalize_targets : boolean, optional
+        Flag to enable normalization of target pacthes. See: https://arxiv.org/abs/1803.04189
+
+    Return
+    ------
+    function
+        Function that does modified Reinhard normalization to be used in :func:`create_patches`.
+
+    """
+
+    def _normalize(patches_x,patches_y, x,y,mask,channel):
+        patches_x_norm = pow(patches_x/(1+patches_x),1/2.2)
+        if(normalize_targets):
+            patches_y_norm = pow(patches_y/(1+patches_y),1/2.2)
+        else:
+            patches_y_norm = patches_y
+
+        return patches_x_norm, patches_y_norm
+
+    return _normalize
 
 def create_patches(
         raw_data,
@@ -221,8 +244,9 @@ def create_patches(
         transforms    = None,
         patch_filter  = no_background_patches(),
         normalization = norm_percentiles(),
+        overlap       = True,
         shuffle       = True,
-        verbose       = True,
+        verbose       = True
     ):
     """Create normalized training data to be used for neural network training.
 
@@ -252,6 +276,9 @@ def create_patches(
         Function that takes arguments `(patches_x, patches_y, x, y, mask, channel)`, whose purpose is to
         normalize the patches (`patches_x`, `patches_y`) extracted from the associated raw images
         (`x`, `y`, with `mask`; see :class:`RawData`). Default: :func:`norm_percentiles`.
+    overlap: bool, optional
+        Flag indicating if patches are will overlap when randomly samples. If set False random selection is disabled
+        and `n_patches_per_image` must be equal to or less than number of pacthes expected for patch_size across all images.
     shuffle : bool, optional
         Randomly shuffle all extracted patches.
     verbose : bool, optional
@@ -298,7 +325,7 @@ def create_patches(
     tf = Transform(*zip(*transforms)) # convert list of Transforms into Transform of lists
     image_pairs = compose(*tf.generator)(image_pairs) # combine all transformations with raw images as input
     n_transforms = np.prod(tf.size)
-    n_images = n_raw_images * n_transforms
+    n_images = n_raw_images * n_transforms    
     n_patches = n_images * n_patches_per_image
     n_required_memory_bytes = 2 * n_patches*np.prod(patch_size) * 4
 
@@ -343,7 +370,10 @@ def create_patches(
         (channel is None or (isinstance(channel,int) and 0<=channel<x.ndim)) or _raise(ValueError())
         channel is None or patch_size[channel]==x.shape[channel] or _raise(ValueError('extracted patches must contain all channels.'))
 
-        _Y,_X = sample_patches_from_multiple_stacks((y,x), patch_size, n_patches_per_image, mask, patch_filter)
+        _Y,_X = sample_patches_from_multiple_stacks((y,x), patch_size, n_patches_per_image, mask, patch_filter, overlap=overlap)
+        
+        if not overlap and len(_X) != n_patches_per_image:
+            raise ValueError("Missmatched number of patches per image when no overlap")
 
         s = slice(i*n_patches_per_image,(i+1)*n_patches_per_image)
         X[s], Y[s] = normalization(_X,_Y, x,y,mask,channel)
@@ -364,7 +394,6 @@ def create_patches(
         save_training_data(save_file, X, Y, axes)
 
     return X,Y,axes
-
 
 def create_patches_reduced_target(
         raw_data,
@@ -454,7 +483,6 @@ def create_patches_reduced_target(
         save_training_data(save_file, X, Y, axes)
 
     return X,Y,axes
-
 
 # Misc
 

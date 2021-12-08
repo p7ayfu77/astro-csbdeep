@@ -7,7 +7,7 @@ from itertools import chain
 
 from ..utils import _raise, consume, axes_check_and_normalize
 from ..utils.six import Path, FileNotFoundError
-
+import numpy as np
 
 
 class RawData(namedtuple('RawData' ,('generator' ,'size' ,'description'))):
@@ -97,8 +97,81 @@ class RawData(namedtuple('RawData' ,('generator' ,'size' ,'description'))):
                 yield x, y, axes[-x.ndim:], None
 
         return RawData(_gen, n_images, description)
+    
+    @staticmethod
+    def from_folder_n2n(basepath, source_dirs, axes='CZYX', pattern='*.tif*'):
+        """Get unique pairs of aligned TIFF images read from folders.
 
+        Each image `x` is paired with every other image `y` at most once in each folder.
+        Additional folders allow multiple stacks of images to be processed as input `x` and target `y` for different sources of data.
 
+        Parameters
+        ----------
+        basepath : str
+            Base folder that contains sub-folders with images.
+        source_dirs : list or tuple
+            List of folder names relative to `basepath` that contain the source images (e.g., with low SNR).
+        axes : str
+            Semantics of axes of loaded images (assumed to be the same for all images).
+        pattern : str
+            Glob-style pattern to match the desired TIFF images.
+
+        Returns
+        -------
+        RawData
+            :obj:`RawData` object, whose `generator` is used to yield all TIFF pairs.
+            The generator will return a tuple `(x,y,axes,mask)`, where `x` is from
+            `source_dirs` and `y` is every other image from the `source_dirs` in the same folder;
+            `mask` is set to `None`.
+
+        Raises
+        ------
+        FileNotFoundError
+            If no images are found in `source_dir`.
+
+        Example
+        --------
+        >>> !tree data
+        data
+        ├── source1
+        │   ├── imageA.tif
+        │   └── imageB.tif
+        └── source2
+            ├── imageC.tif
+            └── imageD.tif
+
+        >>> data = RawData.from_folder(basepath='data', source_dirs=['source1','source2'], axes='YX')
+        >>> n_images = data.size
+        >>> for source_x, target_y, axes, mask in data.generator():
+        ...     pass
+
+        """
+
+        p = Path(basepath)       
+        pairs=[]
+        for source_dir in source_dirs:
+            files=list((p/source_dir).glob(pattern))
+            numimages=len(files)        
+            for index_a in range(numimages):
+                for index_b in range(index_a + 1,numimages):
+                    pairs.append((files[index_a],files[index_b]))
+            
+        len(pairs) > 0 or _raise(FileNotFoundError("Didn't find any images."))
+        axes = axes_check_and_normalize(axes)
+        n_images = len(pairs)
+        description = "{p}:, sources='{s}', axes='{a}', pattern='{pt}'".format(p=basepath, s=list(source_dirs),
+                                                                                          a=axes, pt=pattern)
+        def _gen():
+            for fx, fy in pairs:
+                x, y = imread(str(fx)), imread(str(fy))
+                np.max(x) <= 1 or _raise(ValueError(np.max(x)))
+                np.max(y) <= 1 or _raise(ValueError(np.max(y)))
+                np.min(x) >= 0 or _raise(ValueError(np.min(x)))
+                np.min(y) >= 0 or _raise(ValueError(np.min(y)))
+                len(axes) >= x.ndim or _raise(ValueError())
+                yield x, y, axes[-x.ndim:], None
+
+        return RawData(_gen, n_images, description)
 
     @staticmethod
     def from_arrays(X, Y, axes='CZYX'):

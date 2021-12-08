@@ -61,6 +61,20 @@ def loss_mse(mean=True):
             return R(K.square(y_pred[:,:n,...] - y_true))
         return mse
 
+def loss_hdr(mean=True):
+    R = _mean_or_not(mean)
+    if backend_channels_last():
+        def hdr(y_true, y_pred):
+            n = K.shape(y_true)[-1]
+            #return R(K.square(y_pred[...,:n] - y_true)/K.square(y_pred[...,:n] + 0.01))
+            return R(K.square(y_pred[...,:n] - y_true))
+        return hdr
+    else:
+        def hdr(y_true, y_pred):
+            n = K.shape(y_true)[1]
+            #return R(K.square(y_pred[:,:n,...] - y_true)/K.square(y_pred[:,:n,...] + 0.01))
+            return R(K.square(y_pred[:,:n,...] - y_true))
+        return hdr
 
 def loss_thresh_weighted_decay(loss_per_pixel, thresh, w1, w2, alpha):
     def _loss(y_true, y_pred):

@@ -2,7 +2,7 @@ from __future__ import print_function, unicode_literals, absolute_import, divisi
 from six.moves import range, zip, map, reduce, filter
 
 from ..utils import _raise, move_channel_for_backend, axes_dict, axes_check_and_normalize, backend_channels_last
-from ..internals.losses import loss_laplace, loss_mse, loss_mae, loss_thresh_weighted_decay
+from ..internals.losses import loss_laplace, loss_mse, loss_mae, loss_hdr, loss_thresh_weighted_decay
 
 import numpy as np
 

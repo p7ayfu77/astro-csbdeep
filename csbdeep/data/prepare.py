@@ -156,7 +156,21 @@ class PercentileNormalizer(Normalizer):
         """``do_after`` parameter from constructor."""
         return self._do_after
 
+class ReinhardNormalizer(Normalizer):
 
+    def __init__(self, do_after=False):
+        self._do_after = do_after
+
+    def before(self, x, axes):
+        return pow(x/(1+x),1/2.2)
+
+    def after(self, mean, scale, axes):
+        self.do_after or _raise(ValueError())
+        return mean, scale
+
+    @property
+    def do_after(self):
+        return self._do_after
 
 @add_metaclass(ABCMeta)
 class Resizer():
