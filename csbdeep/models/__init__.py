@@ -51,6 +51,7 @@ del tensorflow, sys, keras_import, IS_TF_1, K
 from .config import BaseConfig, Config
 from .base_model import BaseModel
 from .care_standard import CARE
+from .care_hdf5 import HDF5CARE
 from .care_upsampling import UpsamplingCARE
 from .care_isotropic import IsotropicCARE
 from .care_projection import ProjectionConfig, ProjectionCARE

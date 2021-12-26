@@ -7,8 +7,8 @@ from itertools import chain
 
 from ..utils import _raise, consume, axes_check_and_normalize
 from ..utils.six import Path, FileNotFoundError
-import numpy as np
 
+from .prepare import PreProcessor, NoPreProcessor
 
 class RawData(namedtuple('RawData' ,('generator' ,'size' ,'description'))):
     """:func:`collections.namedtuple` with three fields: `generator`, `size`, and `description`.
@@ -99,7 +99,7 @@ class RawData(namedtuple('RawData' ,('generator' ,'size' ,'description'))):
         return RawData(_gen, n_images, description)
     
     @staticmethod
-    def from_folder_n2n(basepath, source_dirs, axes='CZYX', pattern='*.tif*'):
+    def from_folder_n2n(basepath, source_dirs, axes='CZYX', pattern='*.tif*', preprocessor: PreProcessor=NoPreProcessor(), imageloader=None):
         """Get unique pairs of aligned TIFF images read from folders.
 
         Each image `x` is paired with every other image `y` at most once in each folder.
@@ -161,15 +161,16 @@ class RawData(namedtuple('RawData' ,('generator' ,'size' ,'description'))):
         n_images = len(pairs)
         description = "{p}:, sources='{s}', axes='{a}', pattern='{pt}'".format(p=basepath, s=list(source_dirs),
                                                                                           a=axes, pt=pattern)
+        if imageloader is None:
+            imageloader = RawData._basic_loader
+
         def _gen():
             for fx, fy in pairs:
-                x, y = imread(str(fx)), imread(str(fy))
-                np.max(x) <= 1 or _raise(ValueError(np.max(x)))
-                np.max(y) <= 1 or _raise(ValueError(np.max(y)))
-                np.min(x) >= 0 or _raise(ValueError(np.min(x)))
-                np.min(y) >= 0 or _raise(ValueError(np.min(y)))
+                x, y = imageloader(str(fx)), imageloader(str(fy))
+                x_pre = preprocessor.before(x, None)
+                y_pre = preprocessor.before(y, None)
                 len(axes) >= x.ndim or _raise(ValueError())
-                yield x, y, axes[-x.ndim:], None
+                yield x_pre, y_pre, axes[-x.ndim:], None
 
         return RawData(_gen, n_images, description)
 
@@ -183,3 +184,8 @@ class RawData(namedtuple('RawData' ,('generator' ,'size' ,'description'))):
                 yield x, y, axes[-x.ndim:], None
 
         return RawData(_gen, len(X), "numpy array")
+
+    @staticmethod
+    def _basic_loader(file):
+        return imread(file)
+

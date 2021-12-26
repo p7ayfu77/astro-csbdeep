@@ -1,7 +1,7 @@
 __pycache__/
 *.py[cod]
 .idea
-
+.venv
 .DS_Store
 .ipynb_checkpoints
 .pytest_cache

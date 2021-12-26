@@ -285,3 +285,114 @@ class PadAndCropResizer(Resizer):
         )
         # print(crop)
         return x[crop]
+
+
+from colour_hdri import tonemapping_operator_Reinhard2004
+
+@add_metaclass(ABCMeta)
+class PreProcessor():
+    """Abstract base class for Pre-processor methods."""
+
+    @abstractmethod
+    def before(self, x, axes):
+        """Pre-processing of the raw input image (method stub).
+
+        Parameters
+        ----------
+        x : :class:`numpy.ndarray`
+            Raw input image.
+        axes : str
+            Axes of input image x
+
+        Returns
+        -------
+        :class:`numpy.ndarray`
+            Pre-processed input image with suitable values for neural network input.
+        """
+
+    @abstractmethod
+    def after(self, mean, scale, axes):
+        """Possible adjustment of predicted restored image (method stub).
+
+        Parameters
+        ----------
+        mean : :class:`numpy.ndarray`
+            Predicted restored image or per-pixel ``mean`` of Laplace distributions
+            for probabilistic model.
+        scale: :class:`numpy.ndarray` or None
+            Per-pixel ``scale`` of Laplace distributions for probabilistic model (``None`` otherwise.)
+        axes : str
+            Axes of ``mean`` and ``scale``
+
+        Returns
+        -------
+        :class:`numpy.ndarray`
+            Adjusted restored image(s).
+        """
+
+    def __call__(self, x, axes):
+        """Alias for :func:`before` to make this callable."""
+        return self.before(x, axes)
+
+    @abstractproperty
+    def do_after(self):
+        """bool : Flag to indicate whether :func:`after` should be called."""
+
+
+class NoPreProcessor(PreProcessor):
+    """No Pre-processing.
+
+    Parameters
+    ----------
+    do_after : bool
+        Flag to indicate whether to undo normalization.
+
+    Raises
+    ------
+    ValueError
+        If :func:`after` is called, but parameter `do_after` was set to ``False`` in the constructor.
+    """
+
+    def __init__(self, do_after=False):
+        self._do_after = do_after
+
+    def before(self, x, axes):
+        return x
+
+    def after(self, mean, scale, axes):
+        self.do_after or _raise(ValueError())
+        return mean, scale
+
+    @property
+    def do_after(self):
+        return self._do_after
+
+
+class ReinhardPreProcessor(PreProcessor):
+    """No Pre-processing.
+
+    Parameters
+    ----------
+    do_after : bool
+        Flag to indicate whether to undo normalization.
+
+    Raises
+    ------
+    ValueError
+        If :func:`after` is called, but parameter `do_after` was set to ``False`` in the constructor.
+    """
+
+    def __init__(self, do_after=False, **kwargs):
+        self._do_after = do_after
+        self.kwargs = kwargs
+
+    def before(self, x, axes):
+        return tonemapping_operator_Reinhard2004(x, **self.kwargs)
+
+    def after(self, mean, scale, axes):
+        self.do_after or _raise(ValueError())
+        return mean, scale
+
+    @property
+    def do_after(self):
+        return self._do_after
