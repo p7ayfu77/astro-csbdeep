@@ -28,7 +28,8 @@ def create_patches_hdf5(
         normalization = norm_percentiles(),
         overlap       = True,
         verbose       = True,
-        shuffle       = True
+        shuffle       = True,
+        collapse_channel = False
     ):
     """Create normalized training data saved to HDF5 file on disk, to be used for neural network training.
 
@@ -96,6 +97,20 @@ def create_patches_hdf5(
     image_pairs, n_raw_images = raw_data.generator(), raw_data.size
     tf = Transform(*zip(*transforms)) # convert list of Transforms into Transform of lists
     image_pairs = compose(*tf.generator)(image_pairs) # combine all transformations with raw images as input
+
+    collapse_multiplier = 1
+    out_patch_size = patch_size
+    if collapse_channel:
+        temp_image_pairs = compose(*tf.generator)(raw_data.generator())
+        _x,_y,_axes,_mask = next(temp_image_pairs) # get the first entry from the generator
+        _axes = axes_check_and_normalize(_axes,len(patch_size))
+        _channel = axes_dict(_axes)['C']
+        collapse_multiplier = _x.shape[_channel]
+        out_patch_size = list(out_patch_size)
+        out_patch_size[_channel] = 1
+        out_patch_size = tuple(out_patch_size)
+        del _x,_y,_axes,_mask
+
     n_transforms = np.prod(tf.size)
     n_images = n_raw_images * n_transforms    
     n_patches = n_images * n_patches_per_image
@@ -109,6 +124,8 @@ def create_patches_hdf5(
         print('='*66)
         print('%5d raw images x %4d transformations   = %5d images' % (n_raw_images,n_transforms,n_images))
         print('%5d images     x %4d patches per image = %5d patches in total' % (n_images,n_patches_per_image,n_patches))
+        if collapse_channel:
+            print('%5d patches    x %4d channel per patch = %5d collased patches in total' % (n_patches,collapse_multiplier,n_patches*collapse_multiplier))
         print('='*66)
         print('Input data:')
         print(raw_data.description)
@@ -119,14 +136,17 @@ def create_patches_hdf5(
         print('='*66)
         print('Patch size:')
         print(" x ".join(str(p) for p in patch_size))
+        if collapse_channel:
+            print('Collapsed Patch size:')
+            print(" x ".join(str(p) for p in out_patch_size))
         print('=' * 66)
 
     sys.stdout.flush()
 
-    datashape = (n_patches,)+tuple(patch_size)
+    datashape = (n_patches*collapse_multiplier,)+tuple(out_patch_size)
     #TODO: Test if perf is better with chunks of n_patches_per_image
-    chunks=((1,)+tuple(patch_size))
-
+    #chunks=((n_patches_per_image*collapse_multiplier,)+tuple(out_patch_size))
+    chunks=((1,)+tuple(out_patch_size))
     
     parent_path = Path(save_file).parent
     with tempfile.TemporaryFile(dir=parent_path) as temporaryFile:
@@ -158,8 +178,15 @@ def create_patches_hdf5(
             if not overlap and len(_X) != n_patches_per_image:
                 raise ValueError("Missmatched number of patches per image when no overlap")
 
-            s = slice(i*n_patches_per_image,(i+1)*n_patches_per_image)
-            X[s], Y[s] = normalization(_X,_Y, x,y,mask,channel)
+            _Xn, _Yn = normalization(_X,_Y, x,y,mask,channel)
+            
+            if collapse_channel:
+                s = slice(i*n_patches_per_image*collapse_multiplier,(i+1)*n_patches_per_image*collapse_multiplier)
+                X[s] = np.moveaxis(np.concatenate(_Xn, axis=channel),channel,0)[...,np.newaxis]
+                Y[s] = np.moveaxis(np.concatenate(_Yn, axis=channel),channel,0)[...,np.newaxis]
+            else:
+                s = slice(i*n_patches_per_image,(i+1)*n_patches_per_image)
+                X[s], Y[s] = _Xn, _Yn
 
         axes = 'S'+axes
         X.attrs['axes'] = axes
@@ -168,7 +195,8 @@ def create_patches_hdf5(
     
     if shuffle:
         print('Shuffling HDF5 data via copy. This can take time for large datasets...')
-        hdf5_copy_shuffle(temporaryFileName,save_file,datashape=datashape,chunks=chunks)
+        out_chunks=((256,)+tuple(out_patch_size))
+        hdf5_copy_shuffle(temporaryFileName,save_file,datashape=datashape,chunks=out_chunks)
         os.remove(temporaryFileName)
     else:
         os.rename(temporaryFileName,save_file)
@@ -177,12 +205,20 @@ def create_patches_hdf5(
 
 # Misc
 
-def hdf5_copy_shuffle(tempfile,outfile,datashape,chunks):
+def hdf5_copy_shuffle(tempfile,outfile,datashape=None,chunks=None):
     with h5py.File(tempfile, 'r') as hdf5file_temp:
         X_dset = hdf5file_temp['X']
         Y_dset = hdf5file_temp['Y']
-        
+
         len(X_dset) == len(Y_dset) or _raise(ValueError("X and Y must have same length"))
+
+        if datashape is None:
+            datashape = X_dset.shape
+        print("Destination Shape", datashape)
+        if chunks is None:
+            chunks = X_dset.chunks
+        print("Destination Chunks", chunks)
+
         n_samples = len(X_dset)
         shuffle_indx = np.arange(n_samples)
         random.shuffle(shuffle_indx)
@@ -190,8 +226,8 @@ def hdf5_copy_shuffle(tempfile,outfile,datashape,chunks):
         with h5py.File(outfile, 'w') as hdf5file_out:
             X = hdf5file_out.create_dataset("X", datashape, maxshape=datashape, chunks=chunks, dtype='float32')
             Y = hdf5file_out.create_dataset("Y", datashape, maxshape=datashape, chunks=chunks, dtype='float32')
-        
-            for dest_idx, source_idx in enumerate(shuffle_indx):
+                
+            for dest_idx, source_idx in tqdm(enumerate(shuffle_indx),total=n_samples,disable=False):
                 X[dest_idx,...] = X_dset[source_idx,...]
                 Y[dest_idx,...] = Y_dset[source_idx,...]
             
