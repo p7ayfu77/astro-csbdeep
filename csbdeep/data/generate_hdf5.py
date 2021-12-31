@@ -29,7 +29,8 @@ def create_patches_hdf5(
         overlap       = True,
         verbose       = True,
         shuffle       = True,
-        collapse_channel = False
+        collapse_channel = False,
+        chunk_samples = 256
     ):
     """Create normalized training data saved to HDF5 file on disk, to be used for neural network training.
 
@@ -64,6 +65,10 @@ def create_patches_hdf5(
         and `n_patches_per_image` must be equal to or less than number of pacthes expected for patch_size across all images.
     shuffle : bool, optional
         Randomly shuffle all extracted patches.
+    collapse_channel : bool, optional
+        Collapse Channel dimension, useful when wanting to process all data from RGB data as one channel.
+    chunk_samples : int, optional
+        Number of samples per HDF5 chunk `(chunk_samples,)+tuple(patch_size))`. This can be aligned with the expected read batch size when training for better disk & memory IO performance
     verbose : bool, optional
         Display overview of images, transforms, etc.
 
@@ -114,10 +119,6 @@ def create_patches_hdf5(
     n_transforms = np.prod(tf.size)
     n_images = n_raw_images * n_transforms    
     n_patches = n_images * n_patches_per_image
-    n_required_memory_bytes = 2 * n_patches*np.prod(patch_size) * 4
-
-    ## memory check
-    _memory_check(n_required_memory_bytes)
 
     ## summary
     if verbose:
@@ -146,7 +147,10 @@ def create_patches_hdf5(
     datashape = (n_patches*collapse_multiplier,)+tuple(out_patch_size)
     #TODO: Test if perf is better with chunks of n_patches_per_image
     #chunks=((n_patches_per_image*collapse_multiplier,)+tuple(out_patch_size))
-    chunks=((1,)+tuple(out_patch_size))
+    if shuffle:
+        chunks=((1,)+tuple(out_patch_size))
+    else:
+        chunks=((chunk_samples,)+tuple(out_patch_size))
     
     parent_path = Path(save_file).parent
     with tempfile.TemporaryFile(dir=parent_path) as temporaryFile:
@@ -195,7 +199,7 @@ def create_patches_hdf5(
     
     if shuffle:
         print('Shuffling HDF5 data via copy. This can take time for large datasets...')
-        out_chunks=((256,)+tuple(out_patch_size))
+        out_chunks=((chunk_samples,)+tuple(out_patch_size))
         hdf5_copy_shuffle(temporaryFileName,save_file,datashape=datashape,chunks=out_chunks)
         os.remove(temporaryFileName)
     else:

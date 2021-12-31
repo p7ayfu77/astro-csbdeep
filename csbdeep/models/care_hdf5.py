@@ -7,18 +7,19 @@ from ..utils import _raise, axes_check_and_normalize, axes_dict
 from ..utils.tf import IS_TF_1, CARETensorBoardImage
 from ..internals import train_hdf5
 from ..data.generate_hdf5 import HDF5Data
+import numpy as np
 
 class HDF5CARE(CARE):
 
-    def train(self, XY_data: HDF5Data, validation_data, epochs=None, steps_per_epoch=None):
+    def train(self, XY_data: HDF5Data, validation_data :HDF5Data, epochs=None, steps_per_epoch=None):
         """Train the neural network with an HDF5 data iterator of type `HDF5Data`.
 
         Parameters
         ----------
         XY_data : :class:`HDF5Data`
             Which returns X[i], Y[i] for XY_data[i]
-        validation_data : tuple(:class:`numpy.ndarray`, :class:`numpy.ndarray`)
-            Tuple of arrays for source and target validation images.
+        validation_data : :class:`HDF5Data`
+            Which returns X_val[i], Y_val[i] for validation_data[i]
         epochs : int
             Optional argument to use instead of the value from ``config``.
         steps_per_epoch : int
@@ -30,8 +31,6 @@ class HDF5CARE(CARE):
             See `Keras training history <https://keras.io/models/model/#fit>`_.
 
         """
-        ((isinstance(validation_data,(list,tuple)) and len(validation_data)==2)
-            or _raise(ValueError('validation_data must be a pair of numpy arrays')))
 
         n_train, n_val = len(XY_data), len(validation_data)
         frac_val = (1.0 * n_val) / (n_train + n_val)
@@ -64,6 +63,7 @@ class HDF5CARE(CARE):
                                                        n_images=3, prob_out=self.config.probabilistic))
 
         training_data = train_hdf5.HDF5DataWrapper(XY_data, self.config.train_batch_size, length=epochs*steps_per_epoch)
+        validation_data = train_hdf5.HDF5DataWrapper(validation_data, self.config.train_batch_size, length=int(np.ceil(len(validation_data)/self.config.train_batch_size)))
         
         fit = self.keras_model.fit_generator if IS_TF_1 else self.keras_model.fit
 

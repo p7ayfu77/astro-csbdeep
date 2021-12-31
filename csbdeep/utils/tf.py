@@ -454,9 +454,12 @@ class CARETensorBoardImage(Callback):
         self.n_inputs  = len(self.model.inputs)
         self.n_outputs = len(self.model.outputs)
 
+        from ..data.generate_hdf5 import HDF5Data
         ## data
         if isinstance(data,(list,tuple)):
             X, Y = data
+        elif isinstance(data,HDF5Data):
+            X, Y = data[:n_images]
         else:
             X, Y = data[0]
         if self.n_inputs  == 1 and isinstance(X,np.ndarray): X = (X,)
