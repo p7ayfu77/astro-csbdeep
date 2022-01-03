@@ -153,7 +153,7 @@ def create_patches_hdf5(
         chunks=((chunk_samples,)+tuple(out_patch_size))
     
     parent_path = Path(save_file).parent
-    with tempfile.TemporaryFile(dir=parent_path) as temporaryFile:
+    with tempfile.NamedTemporaryFile(dir=parent_path) as temporaryFile:
         temporaryFileName = temporaryFile.name
     
     with h5py.File(temporaryFileName, 'w', libver='latest') as f:
