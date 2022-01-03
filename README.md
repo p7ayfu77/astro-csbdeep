@@ -57,3 +57,14 @@ Note if you dont see the the venv startup automatically in terminal just activat
 Open up the notebook `AstroNoise2Noise.ipynb` and configure the same python interpreter path `.venv` in the top right hand of the VS Code interface.
 
 Happy coding and clear skies!
+
+## Contributors
+
+Want to say a big thank you to the CSBDeep team who provided their framework along with great examples to get started.
+
+To date, further much appreciated thanks go to contributions from:
+
+* Michael Kitange - ongoing validation and contributions to code
+* JimmyTheChicken#2719 - STF Tone Mapping Algorithm
+
+More to come!
