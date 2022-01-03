@@ -9,7 +9,7 @@ import numpy as np
 
 from six import add_metaclass
 from abc import ABCMeta, abstractmethod, abstractproperty
-
+from scipy import stats
 
 
 @add_metaclass(ABCMeta)
@@ -156,6 +156,7 @@ class PercentileNormalizer(Normalizer):
         """``do_after`` parameter from constructor."""
         return self._do_after
 
+
 class ReinhardNormalizer(Normalizer):
 
     def __init__(self, do_after=False):
@@ -171,6 +172,25 @@ class ReinhardNormalizer(Normalizer):
     @property
     def do_after(self):
         return self._do_after
+
+
+class STFNormalizer(Normalizer):
+
+    def __init__(self, do_after=False):
+        self._do_after = do_after
+        self.normalizer = STFPreProcessor()
+
+    def before(self, x, axes):
+        return self.normalizer.before(x,axes)
+
+    def after(self, mean, scale, axes):
+        self.do_after or _raise(ValueError())
+        return mean, scale
+
+    @property
+    def do_after(self):
+        return self._do_after
+
 
 @add_metaclass(ABCMeta)
 class Resizer():
@@ -388,6 +408,62 @@ class ReinhardPreProcessor(PreProcessor):
 
     def before(self, x, axes):
         return tonemapping_operator_Reinhard2004(x, **self.kwargs)
+
+    def after(self, mean, scale, axes):
+        self.do_after or _raise(ValueError())
+        return mean, scale
+
+    @property
+    def do_after(self):
+        return self._do_after
+
+
+class STFPreProcessor(PreProcessor):
+    """No Pre-processing.
+
+    Parameters
+    ----------
+    do_after : bool
+        Flag to indicate whether to undo normalization.
+
+    Raises
+    ------
+    ValueError
+        If :func:`after` is called, but parameter `do_after` was set to ``False`` in the constructor.
+    """
+    
+    @staticmethod
+    def mtf(m,x):
+        # From: https://pixinsight.com/forum/index.php?threads/mathematically-exact-inverse-of-mtf.14912/
+        
+        n = (m-1)*x
+        d = (2*m - 1)*x - m
+        return n/d
+
+    @staticmethod
+    def stf(data,C=-4,B=0.185,axis=[0,1]):
+        # From: JimmyTheChicken#2719 nightlyastronomy.com
+        # C = -2.8
+        # B = 0.25
+        # c = min( max( 0, med( $T ) + C*mdev( $T ) ), 1 );
+        # mtf( mtf( B, med( $T ) - c ), max( 0, ($T - c)/~c ) )
+        
+        dimC = data.shape[-1]
+        med = np.median(data,axis=axis)
+        c = med + C*stats.median_abs_deviation(data,axis=axis,scale='normal')
+        c = np.max([np.zeros(dimC,), c],0)
+        c = np.min([c, np.ones(dimC,)],0)
+        m = STFPreProcessor.mtf(B, med - c)
+        t = np.max([np.zeros_like(data), (data - c)/(1-c)],axis=0)
+        return STFPreProcessor.mtf(m, t)
+
+    def __init__(self, do_after=False, **kwargs):
+        self._do_after = do_after
+        self.kwargs = kwargs
+
+    def before(self, x, axes):
+        axis = tuple(d for d,a in enumerate(axes) if a != 'C')
+        return STFPreProcessor.stf(x,axis=axis)
 
     def after(self, mean, scale, axes):
         self.do_after or _raise(ValueError())
