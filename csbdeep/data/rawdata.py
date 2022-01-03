@@ -167,8 +167,8 @@ class RawData(namedtuple('RawData' ,('generator' ,'size' ,'description'))):
         def _gen():
             for fx, fy in pairs:
                 x, y = imageloader(str(fx)), imageloader(str(fy))
-                x_pre = preprocessor.before(x, None)
-                y_pre = preprocessor.before(y, None)
+                x_pre = preprocessor.before(x, axes)
+                y_pre = preprocessor.before(y, axes)
                 len(axes) >= x.ndim or _raise(ValueError())
                 yield x_pre, y_pre, axes[-x.ndim:], None
 
