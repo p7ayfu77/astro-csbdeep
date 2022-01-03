@@ -2,6 +2,7 @@ from astropy.io import fits
 
 def read_fits(path):
     """
+    Reads fits data and header from a fits file
 
     :param path: str, file-like or `pathlib.Path`
         File to be opened.
