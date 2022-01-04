@@ -42,8 +42,10 @@ def create_patches_hdf5(
         Shape of the patches to be extraced from raw images.
         Must be compatible with the number of dimensions and axes of the raw images.
         As a general rule, use a power of two along all XYZT axes, or at least divisible by 8.
-    n_patches_per_image : int
+    n_patches_per_image : int or None
         Number of patches to be sampled/extracted from each raw image pair (after transformations, see below).
+        If ``None``, all patches will be sampled randomly for each sample and target image pair.
+        If n_patches_per_image is greater than the total number of possible overlapping or distinct patches then random sampling with replacement is used.
     patch_axes : str or None
         Axes of the extracted patches. If ``None``, will assume to be equal to that of transformed raw data.
     save_file : str or None
@@ -118,15 +120,20 @@ def create_patches_hdf5(
 
     n_transforms = np.prod(tf.size)
     n_images = n_raw_images * n_transforms    
-    n_patches = n_images * n_patches_per_image
+    n_patches = 0 if n_patches_per_image is None else n_images * n_patches_per_image
 
     ## summary
     if verbose:
+
+        n_patches_str = "{0}".format(n_patches_per_image) if n_patches_per_image is not None else "Undefined"
+        n_patches_per_image_str = "{0}".format(n_patches_per_image) if n_patches_per_image is not None else "Undefined"
+        n_col_patches_per_image_str = "{0}".format(n_patches*collapse_multiplier) if n_patches_per_image is not None else "Undefined"
+
         print('='*66)
-        print('%5d raw images x %4d transformations   = %5d images' % (n_raw_images,n_transforms,n_images))
-        print('%5d images     x %4d patches per image = %5d patches in total' % (n_images,n_patches_per_image,n_patches))
+        print('%5d raw image pairs x %4d transformations   = %5d images' % (n_raw_images,n_transforms,n_images))
+        print('%5d images     x %s patches per image = %s patches in total' % (n_images, n_patches_per_image_str, n_patches_str))
         if collapse_channel:
-            print('%5d patches    x %4d channel per patch = %5d collased patches in total' % (n_patches,collapse_multiplier,n_patches*collapse_multiplier))
+            print('%s patches    x %4d channel per patch = %s collased patches in total' % (n_patches_str,collapse_multiplier,n_col_patches_per_image_str))
         print('='*66)
         print('Input data:')
         print(raw_data.description)
@@ -144,7 +151,7 @@ def create_patches_hdf5(
 
     sys.stdout.flush()
 
-    datashape = (n_patches*collapse_multiplier,)+tuple(out_patch_size)
+    
     #TODO: Test if perf is better with chunks of n_patches_per_image
     #chunks=((n_patches_per_image*collapse_multiplier,)+tuple(out_patch_size))
     if shuffle:
@@ -158,8 +165,10 @@ def create_patches_hdf5(
     
     with h5py.File(temporaryFileName, 'w', libver='latest') as f:
         
-        X = f.create_dataset("X", datashape, maxshape=datashape, chunks=chunks, dtype='float32')
-        Y = f.create_dataset("Y", datashape, maxshape=datashape, chunks=chunks, dtype='float32')        
+        datashape = (n_patches*collapse_multiplier,)+tuple(out_patch_size)
+        datasize = None if n_patches_per_image is None else n_patches*collapse_multiplier
+        X = f.create_dataset("X", datashape, maxshape=(datasize,)+tuple(out_patch_size), chunks=chunks, dtype='float32')
+        Y = f.create_dataset("Y", datashape, maxshape=(datasize,)+tuple(out_patch_size), chunks=chunks, dtype='float32')        
 
         ## sample patches from each pair of transformed raw images
         for i, (x,y,_axes,mask) in tqdm(enumerate(image_pairs),total=n_images,disable=(not verbose)):
@@ -179,19 +188,35 @@ def create_patches_hdf5(
 
             _Y,_X = sample_patches_from_multiple_stacks((y,x), patch_size, n_patches_per_image, mask, patch_filter, overlap=overlap)
             
-            if not overlap and len(_X) != n_patches_per_image:
+            n_patches_per_image_out = len(_X)
+            if (n_patches_per_image is not None) and (not overlap) and len(_X) != n_patches_per_image:
                 raise ValueError("Missmatched number of patches per image when no overlap")
 
             _Xn, _Yn = normalization(_X,_Y, x,y,mask,channel)
             
-            if collapse_channel:
-                s = slice(i*n_patches_per_image*collapse_multiplier,(i+1)*n_patches_per_image*collapse_multiplier)
-                X[s] = np.moveaxis(np.concatenate(_Xn, axis=channel),channel,0)[...,np.newaxis]
-                Y[s] = np.moveaxis(np.concatenate(_Yn, axis=channel),channel,0)[...,np.newaxis]
-            else:
-                s = slice(i*n_patches_per_image,(i+1)*n_patches_per_image)
-                X[s], Y[s] = _Xn, _Yn
+            n_patches_per_image_out = n_patches_per_image_out*collapse_multiplier
+            
+            if n_patches_per_image is None:
+                X.resize(X.shape[0]+n_patches_per_image_out, axis=0)
+                Y.resize(Y.shape[0]+n_patches_per_image_out, axis=0)
 
+                if collapse_channel:                
+                    X[-n_patches_per_image_out:] = np.moveaxis(np.concatenate(_Xn, axis=channel),channel,0)[...,np.newaxis]
+                    Y[-n_patches_per_image_out:] = np.moveaxis(np.concatenate(_Yn, axis=channel),channel,0)[...,np.newaxis]
+                else:
+                    X[-n_patches_per_image_out:] = _Xn
+                    Y[-n_patches_per_image_out:] = _Yn
+            else:
+                if collapse_channel:
+                    s = slice(i*n_patches_per_image*collapse_multiplier,(i+1)*n_patches_per_image*collapse_multiplier)
+                    X[s] = np.moveaxis(np.concatenate(_Xn, axis=channel),channel,0)[...,np.newaxis]
+                    Y[s] = np.moveaxis(np.concatenate(_Yn, axis=channel),channel,0)[...,np.newaxis]
+                else:
+                    s = slice(i*n_patches_per_image,(i+1)*n_patches_per_image)
+                    X[s], Y[s] = _Xn, _Yn
+            
+            
+        datashape = X.shape
         axes = 'S'+axes
         X.attrs['axes'] = axes
         Y.attrs['axes'] = axes

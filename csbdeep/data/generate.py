@@ -95,19 +95,17 @@ def sample_patches_from_multiple_stacks(datas, patch_size, n_samples, datas_mask
 
     if n_valid == 0:
         raise ValueError("'patch_filter' didn't return any region to sample from")
-    if n_samples > n_valid:
-        raise ValueError("'n_samples' is greater than the number of valid regions to sample from")
 
-    sample_inds = range(n_samples) if not overlap else choice(range(n_valid), n_samples, replace=(n_valid < n_samples))
+    if (n_samples is None) and (overlap is True):
+        warnings.warn("Taking all random patches for all images is computationally expensive.")
 
-    # valid_inds = [v + s.start for s, v in zip(border_slices, valid_inds)] # slow for large n_valid
-    # rand_inds = [v[sample_inds] for v in valid_inds]
+    if n_samples is None:
+        n_samples = n_valid
+        sample_inds = range(n_samples)
+    else:
+        sample_inds = choice(range(n_valid), n_samples, replace=(n_valid < n_samples))
+
     rand_inds = [v[sample_inds]*s.step + s.start for s, v in zip(border_slices, valid_inds)]
-
-    # res = [np.stack([data[r[0] - patch_size[0] // 2:r[0] + patch_size[0] - patch_size[0] // 2,
-    #                  r[1] - patch_size[1] // 2:r[1] + patch_size[1] - patch_size[1] // 2,
-    #                  r[2] - patch_size[2] // 2:r[2] + patch_size[2] - patch_size[2] // 2,
-    #                  ] for r in zip(*rand_inds)]) for data in datas]
 
     res = [np.stack([data[tuple(slice(_r-(_p//2),_r+_p-(_p//2)) for _r,_p in zip(r,patch_size))] for r in zip(*rand_inds)]) for data in datas]
 
