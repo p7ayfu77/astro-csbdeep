@@ -133,7 +133,7 @@ def create_patches_hdf5(
         print('%5d raw image pairs x %4d transformations   = %5d images' % (n_raw_images,n_transforms,n_images))
         print('%5d images     x %s patches per image = %s patches in total' % (n_images, n_patches_per_image_str, n_patches_str))
         if collapse_channel:
-            print('%s patches    x %4d channel per patch = %s collased patches in total' % (n_patches_str,collapse_multiplier,n_col_patches_per_image_str))
+            print('%s patches    x %4d channel per patch = %s collapsed patches in total' % (n_patches_str,collapse_multiplier,n_col_patches_per_image_str))
         print('='*66)
         print('Input data:')
         print(raw_data.description)
