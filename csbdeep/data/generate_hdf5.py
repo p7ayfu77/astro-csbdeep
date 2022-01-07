@@ -125,7 +125,7 @@ def create_patches_hdf5(
     ## summary
     if verbose:
 
-        n_patches_str = "{0}".format(n_patches_per_image) if n_patches_per_image is not None else "Undefined"
+        n_patches_str = "{0}".format(n_patches_per_image*n_images) if n_patches_per_image is not None else "Undefined"
         n_patches_per_image_str = "{0}".format(n_patches_per_image) if n_patches_per_image is not None else "Undefined"
         n_col_patches_per_image_str = "{0}".format(n_patches*collapse_multiplier) if n_patches_per_image is not None else "Undefined"
 
@@ -170,14 +170,18 @@ def create_patches_hdf5(
         X = f.create_dataset("X", datashape, maxshape=(datasize,)+tuple(out_patch_size), chunks=chunks, dtype='float32')
         Y = f.create_dataset("Y", datashape, maxshape=(datasize,)+tuple(out_patch_size), chunks=chunks, dtype='float32')        
 
+        tqdm_postfix = TQDMUpdatablePostFix("  ...")
         ## sample patches from each pair of transformed raw images
-        for i, (x,y,_axes,mask) in tqdm(enumerate(image_pairs),total=n_images,disable=(not verbose)):
+        for i, (x,y,_axes,mask) in tqdm(enumerate(image_pairs),total=n_images,disable=(not verbose),postfix=tqdm_postfix):
+            tqdm_postfix.set_postfix("  Last Image Shape {0}".format(str(x.shape)))
+
             if i >= n_images:
                 warnings.warn('more raw images (or transformations thereof) than expected, skipping excess images.')
                 break
             if i==0:
                 axes = axes_check_and_normalize(_axes,len(patch_size))
                 channel = axes_dict(axes)['C']
+
             # checks
             # len(axes) >= x.ndim or _raise(ValueError())
             axes == axes_check_and_normalize(_axes) or _raise(ValueError('not all images have the same axes.'))
@@ -186,16 +190,11 @@ def create_patches_hdf5(
             (channel is None or (isinstance(channel,int) and 0<=channel<x.ndim)) or _raise(ValueError())
             channel is None or patch_size[channel]==x.shape[channel] or _raise(ValueError('extracted patches must contain all channels.'))
 
-            _Y,_X = sample_patches_from_multiple_stacks((y,x), patch_size, n_patches_per_image, mask, patch_filter, overlap=overlap)
-            
-            n_patches_per_image_out = len(_X)
-            if (n_patches_per_image is not None) and (not overlap) and len(_X) != n_patches_per_image:
-                raise ValueError("Missmatched number of patches per image when no overlap")
-
+            _Y,_X = sample_patches_from_multiple_stacks((y,x), patch_size, n_patches_per_image, mask, patch_filter, overlap=overlap)            
             _Xn, _Yn = normalization(_X,_Y, x,y,mask,channel)
-            
-            n_patches_per_image_out = n_patches_per_image_out*collapse_multiplier
-            
+
+            n_patches_per_image_out = len(_X)*collapse_multiplier
+
             if n_patches_per_image is None:
                 X.resize(X.shape[0]+n_patches_per_image_out, axis=0)
                 Y.resize(Y.shape[0]+n_patches_per_image_out, axis=0)
@@ -207,12 +206,11 @@ def create_patches_hdf5(
                     X[-n_patches_per_image_out:] = _Xn
                     Y[-n_patches_per_image_out:] = _Yn
             else:
-                if collapse_channel:
-                    s = slice(i*n_patches_per_image*collapse_multiplier,(i+1)*n_patches_per_image*collapse_multiplier)
+                s = slice(i*n_patches_per_image_out,(i+1)*n_patches_per_image_out)
+                if collapse_channel:                    
                     X[s] = np.moveaxis(np.concatenate(_Xn, axis=channel),channel,0)[...,np.newaxis]
                     Y[s] = np.moveaxis(np.concatenate(_Yn, axis=channel),channel,0)[...,np.newaxis]
-                else:
-                    s = slice(i*n_patches_per_image,(i+1)*n_patches_per_image)
+                else:                    
                     X[s], Y[s] = _Xn, _Yn
             
             
@@ -220,7 +218,12 @@ def create_patches_hdf5(
         axes = 'S'+axes
         X.attrs['axes'] = axes
         Y.attrs['axes'] = axes
-
+        X.attrs['n_patches_per_image'] = n_patches_per_image_str
+        Y.attrs['n_patches_per_image'] = n_patches_per_image_str
+        X.attrs['n_raw_images'] = str(n_raw_images)
+        Y.attrs['n_raw_images'] = str(n_raw_images)
+        X.attrs['input_data'] = raw_data.description
+        Y.attrs['input_data'] = raw_data.description
     
     if shuffle:
         print('Shuffling HDF5 data via copy. This can take time for large datasets...')
@@ -341,3 +344,15 @@ class HDF5Data():
 
     def __len__(self):
         return len(self.sample_indx)
+
+# TQDM Helper
+class TQDMUpdatablePostFix():
+
+    def __init__(self, postfix):
+        self.postfix = postfix
+
+    def set_postfix(self, postfix):
+        self.postfix = postfix
+        
+    def __str__(self) -> str:
+        return self.postfix

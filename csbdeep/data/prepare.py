@@ -176,9 +176,9 @@ class ReinhardNormalizer(Normalizer):
 
 class STFNormalizer(Normalizer):
 
-    def __init__(self, do_after=False):
+    def __init__(self, C=-4.0, B=0.185, do_after=False):
         self._do_after = do_after
-        self.normalizer = STFPreProcessor()
+        self.normalizer = STFPreProcessor(C=C,B=B)
 
     def before(self, x, axes):
         return self.normalizer.before(x,axes)
@@ -417,7 +417,7 @@ class ReinhardPreProcessor(PreProcessor):
     def do_after(self):
         return self._do_after
 
-
+import numexpr
 class STFPreProcessor(PreProcessor):
     """No Pre-processing.
 
@@ -436,34 +436,54 @@ class STFPreProcessor(PreProcessor):
     def mtf(m,x):
         # From: https://pixinsight.com/forum/index.php?threads/mathematically-exact-inverse-of-mtf.14912/
         
-        n = (m-1)*x
-        d = (2*m - 1)*x - m
-        return n/d
+        # This seems to be slower
+        # try:
+        #     import numexpr
+        #     mtf_result = numexpr.evaluate("((m - 1.0) * x) / ( (2.0 * m - 1.0) * x - m )",casting='no')
+        # except ImportError:
+        #     mtf_result =                   ((m - 1.0) * x) / ( (2.0 * m - 1.0) * x - m )
+        
+        # return mtf_result
+        
+        n = (m - 1.0) * x
+        d = (2.0 * m - 1.0) * x - m
+        return n / d        
 
     @staticmethod
-    def stf(data,C=-4,B=0.185,axis=[0,1]):
+    def stf(d,C=-4.0,B=0.185,axis=[0,1]):
         # From: JimmyTheChicken#2719 nightlyastronomy.com
         # C = -2.8
         # B = 0.25
         # c = min( max( 0, med( $T ) + C*mdev( $T ) ), 1 );
         # mtf( mtf( B, med( $T ) - c ), max( 0, ($T - c)/~c ) )
         
-        dimC = data.shape[-1]
-        med = np.median(data,axis=axis)
-        c = med + C*stats.median_abs_deviation(data,axis=axis,scale='normal')
-        c = np.max([np.zeros(dimC,), c],0)
-        c = np.min([c, np.ones(dimC,)],0)
+        med = np.median(d,axis=axis)
+        #mad = stats.median_absolute_deviation(d,axis=axis,scale=1.4826)
+        mad = stats.median_abs_deviation(d,axis=axis,scale='normal')
+        c = np.clip(med + C*mad,a_min=0,a_max=1)
         m = STFPreProcessor.mtf(B, med - c)
-        t = np.max([np.zeros_like(data), (data - c)/(1-c)],axis=0)
+        t = np.clip((d - c)/(1.0 - c),a_min=0,a_max=1)
         return STFPreProcessor.mtf(m, t)
 
-    def __init__(self, do_after=False, **kwargs):
+    @staticmethod
+    def mad(arr,axis):
+        """ Median Absolute Deviation: a "Robust" version of standard deviation.
+            Indices variabililty of the sample.
+            https://en.wikipedia.org/wiki/Median_absolute_deviation 
+        """
+        #arr = np.ma.array(arr).compressed() # should be faster to not use masked arrays.
+        med = np.median(arr, axis=axis)
+        return np.median(np.abs(arr - med),axis=axis)
+
+    def __init__(self, C=-4.0, B=0.185, do_after=False, **kwargs):
         self._do_after = do_after
         self.kwargs = kwargs
+        self.C = C
+        self.B = B
 
     def before(self, x, axes):
         axis = tuple(d for d,a in enumerate(axes) if a != 'C')
-        return STFPreProcessor.stf(x,axis=axis)
+        return STFPreProcessor.stf(x, C=self.C, B=self.B, axis=axis)
 
     def after(self, mean, scale, axes):
         self.do_after or _raise(ValueError())
