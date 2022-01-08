@@ -176,16 +176,28 @@ class ReinhardNormalizer(Normalizer):
 
 class STFNormalizer(Normalizer):
 
-    def __init__(self, C=-4.0, B=0.185, do_after=False):
+    def __init__(self, C=-4.0, B=0.185, do_after=True):
         self._do_after = do_after
-        self.normalizer = STFPreProcessor(C=C,B=B)
+        self.C = C
+        self.B = B
 
     def before(self, x, axes):
-        return self.normalizer.before(x,axes)
+        axis = tuple(d for d,a in enumerate(axes) if a != 'C')
+        _x, self.m, self.c = STFPreProcessor.stf(x, self.C, self.B, axis)
+        return _x
+
+    def norm(self,data):
+        return (data - np.min(data)) / (np.max(data) - np.min(data))
 
     def after(self, mean, scale, axes):
-        self.do_after or _raise(ValueError())
-        return mean, scale
+        self.do_after or _raise(ValueError())        
+        
+        # Mean requires normalising to [0,1] range else produces harsh clipping
+        mean = self.norm(mean)
+
+        x_ = STFPreProcessor.rev_stf(mean,self.m,self.c)
+
+        return x_, scale
 
     @property
     def do_after(self):
@@ -419,7 +431,7 @@ class ReinhardPreProcessor(PreProcessor):
 
 import numexpr
 class STFPreProcessor(PreProcessor):
-    """No Pre-processing.
+    """STF Pre-processing.
 
     Parameters
     ----------
@@ -431,7 +443,25 @@ class STFPreProcessor(PreProcessor):
     ValueError
         If :func:`after` is called, but parameter `do_after` was set to ``False`` in the constructor.
     """
-    
+
+    def __init__(self, C=-4.0, B=0.185, do_after=False, **kwargs):
+        self._do_after = do_after
+        self.kwargs = kwargs
+        self.C = C
+        self.B = B
+
+    def before(self, x, axes):
+        axis = tuple(d for d,a in enumerate(axes) if a != 'C')
+        return STFPreProcessor.stf(x, C=self.C, B=self.B, axis=axis)[0]
+
+    def after(self, mean, scale, axes):
+        self.do_after or _raise(ValueError())
+        return mean, scale
+
+    @property
+    def do_after(self):
+        return self._do_after
+
     @staticmethod
     def mtf(m,x):
         # From: https://pixinsight.com/forum/index.php?threads/mathematically-exact-inverse-of-mtf.14912/
@@ -450,6 +480,13 @@ class STFPreProcessor(PreProcessor):
         return n / d        
 
     @staticmethod
+    def rev_mtf(m, x):
+        # From: https://pixinsight.com/forum/index.php?threads/mathematically-exact-inverse-of-mtf.14912/
+        # MTF(x, 1-m) = mx/(1 - x + m (2x - 1)) = mx/(1 - m + x(2m - 1))
+
+        return (m*x)/(1.0 - m + x*(2.0*m - 1.0))
+
+    @staticmethod
     def stf(d,C=-4.0,B=0.185,axis=[0,1]):
         # From: JimmyTheChicken#2719 nightlyastronomy.com
         # C = -2.8
@@ -463,7 +500,14 @@ class STFPreProcessor(PreProcessor):
         c = np.clip(med + C*mad,a_min=0,a_max=1)
         m = STFPreProcessor.mtf(B, med - c)
         t = np.clip((d - c)/(1.0 - c),a_min=0,a_max=1)
-        return STFPreProcessor.mtf(m, t)
+        return STFPreProcessor.mtf(m, t), m, c
+
+    @staticmethod
+    def rev_stf(d,m,c):
+        t = STFPreProcessor.mtf(1-m,d)
+        # The approximated inverse MTF doesnt return the closest result to the original.
+        #t = STFPreProcessor.rev_mtf(m,d)
+        return t * (1.0 - c) + c
 
     @staticmethod
     def mad(arr,axis):
@@ -474,21 +518,3 @@ class STFPreProcessor(PreProcessor):
         #arr = np.ma.array(arr).compressed() # should be faster to not use masked arrays.
         med = np.median(arr, axis=axis)
         return np.median(np.abs(arr - med),axis=axis)
-
-    def __init__(self, C=-4.0, B=0.185, do_after=False, **kwargs):
-        self._do_after = do_after
-        self.kwargs = kwargs
-        self.C = C
-        self.B = B
-
-    def before(self, x, axes):
-        axis = tuple(d for d,a in enumerate(axes) if a != 'C')
-        return STFPreProcessor.stf(x, C=self.C, B=self.B, axis=axis)
-
-    def after(self, mean, scale, axes):
-        self.do_after or _raise(ValueError())
-        return mean, scale
-
-    @property
-    def do_after(self):
-        return self._do_after
