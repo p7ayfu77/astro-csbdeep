@@ -7,8 +7,6 @@ import numpy as np
 from ..utils.tf import keras_import
 K = keras_import('backend')
 
-
-
 def _mean_or_not(mean):
     # return (lambda x: K.mean(x,axis=(-1 if backend_channels_last() else 1))) if mean else (lambda x: x)
     # Keras also only averages over axis=-1, see https://github.com/keras-team/keras/blob/master/keras/losses.py

@@ -13,6 +13,7 @@ from ..io import save_training_data
 
 from .transform import Transform, permute_axes, broadcast_target
 
+from .prepare import STFPreProcessor
 
 ## Patch filter
 
@@ -89,7 +90,7 @@ def sample_patches_from_multiple_stacks(datas, patch_size, n_samples, datas_mask
 
     # get the valid indices
 
-    border_slices = tuple([slice(s // 2, d - s + s // 2 + 1, s if not overlap else None) for s, d in zip(patch_size, datas[0].shape)])
+    border_slices = tuple([slice(s // 2, d - s + s // 2 + 1, s if not overlap else 1) for s, d in zip(patch_size, datas[0].shape)])
     valid_inds = np.where(patch_mask[border_slices])
     n_valid = len(valid_inds[0])
 
@@ -226,6 +227,44 @@ def norm_reinhard(normalize_targets=False):
         patches_x_norm = pow(patches_x/(1+patches_x),1/2.2)
         if(normalize_targets):
             patches_y_norm = pow(patches_y/(1+patches_y),1/2.2)
+        else:
+            patches_y_norm = patches_y
+
+        return patches_x_norm, patches_y_norm
+
+    return _normalize
+
+def norm_stf(C=-4.0,B=0.185, normalize_targets=True):
+       
+    def _normalize(patches_x,patches_y, x,y,mask,channel):
+        
+        axis = None if channel is None else tuple((d for d in range(x.ndim) if d != channel))
+        
+        m, c = STFPreProcessor.stf_scale(x, C=C,B=B,axis=axis)
+        patches_x_norm = np.clip((patches_x - c)/(1.0 - c),a_min=0,a_max=1)
+        patches_x_norm = STFPreProcessor.mtf(m, patches_x_norm)
+
+        if(normalize_targets):
+            m, c = STFPreProcessor.stf_scale(y, C=C,B=B,axis=axis)
+            patches_y_norm = np.clip((patches_y - c)/(1.0 - c),a_min=0,a_max=1)
+            patches_y_norm = STFPreProcessor.mtf(m, patches_y_norm)
+        else:
+            patches_y_norm = patches_y
+
+        return patches_x_norm, patches_y_norm
+
+    return _normalize
+
+def norm_simple(normalize_targets=True):
+       
+    def _normalize(patches_x,patches_y, x,y,mask,channel):
+        
+        axis = None if channel is None else tuple((d for d in range(x.ndim) if d != channel))
+        
+        patches_x_norm = (patches_x - np.mean(x,axis=axis,keepdims=True)) / np.std(x,axis=axis,keepdims=True)
+
+        if(normalize_targets):
+            patches_y_norm = (patches_y - np.mean(y,axis=axis,keepdims=True)) / np.std(y,axis=axis,keepdims=True)
         else:
             patches_y_norm = patches_y
 

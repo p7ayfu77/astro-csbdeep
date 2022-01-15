@@ -203,6 +203,28 @@ class STFNormalizer(Normalizer):
     def do_after(self):
         return self._do_after
 
+class SimpleNormalizer(Normalizer):
+
+    def __init__(self, do_after=True):
+        self._do_after = do_after
+
+    def before(self, x, axes):
+        axis = tuple(d for d,a in enumerate(axes) if a != 'C')
+        self.mean = np.mean(x,axis=axis,keepdims=True)
+        self.std = np.std(x,axis=axis,keepdims=True)
+
+        return (x - self.mean)/self.std
+
+    def after(self, mean, scale, axes):
+        self.do_after or _raise(ValueError())        
+        
+        x_ = (mean * self.std) + self.mean
+
+        return x_, scale
+
+    @property
+    def do_after(self):
+        return self._do_after
 
 @add_metaclass(ABCMeta)
 class Resizer():
@@ -399,6 +421,10 @@ class NoPreProcessor(PreProcessor):
     def do_after(self):
         return self._do_after
 
+    @property
+    def params(self):
+        return ""
+
 
 class ReinhardPreProcessor(PreProcessor):
     """No Pre-processing.
@@ -459,12 +485,17 @@ class STFPreProcessor(PreProcessor):
         return mean, scale
 
     @property
+    def params(self):
+        return f"{self.C}_{self.B}"
+
+    @property
     def do_after(self):
         return self._do_after
 
     @staticmethod
     def mtf(m,x):
         # From: https://pixinsight.com/forum/index.php?threads/mathematically-exact-inverse-of-mtf.14912/
+        # https://pixinsight.com/forum.old/index.php?topic=6321.0
         
         # This seems to be slower
         # try:
@@ -487,7 +518,7 @@ class STFPreProcessor(PreProcessor):
         return (m*x)/(1.0 - m + x*(2.0*m - 1.0))
 
     @staticmethod
-    def stf(d,C=-4.0,B=0.185,axis=[0,1]):
+    def stf_scale(d,C=-4.0,B=0.185,axis=[0,1]):
         # From: JimmyTheChicken#2719 nightlyastronomy.com
         # C = -2.8
         # B = 0.25
@@ -499,6 +530,17 @@ class STFPreProcessor(PreProcessor):
         mad = stats.median_abs_deviation(d,axis=axis,scale='normal')
         c = np.clip(med + C*mad,a_min=0,a_max=1)
         m = STFPreProcessor.mtf(B, med - c)
+        return m, c
+
+    @staticmethod
+    def stf(d,C=-4.0,B=0.185,axis=[0,1]):
+        # From: JimmyTheChicken#2719 nightlyastronomy.com
+        # C = -2.8
+        # B = 0.25
+        # c = min( max( 0, med( $T ) + C*mdev( $T ) ), 1 );
+        # mtf( mtf( B, med( $T ) - c ), max( 0, ($T - c)/~c ) )
+       
+        m, c = STFPreProcessor.stf_scale(d,C,B,axis)
         t = np.clip((d - c)/(1.0 - c),a_min=0,a_max=1)
         return STFPreProcessor.mtf(m, t), m, c
 

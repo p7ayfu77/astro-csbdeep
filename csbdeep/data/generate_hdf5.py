@@ -262,9 +262,11 @@ def hdf5_copy_shuffle(tempfile,outfile,datashape=None,chunks=None):
             for dest_idx, source_idx in tqdm(enumerate(shuffle_indx),total=n_samples,disable=False):
                 X[dest_idx,...] = X_dset[source_idx,...]
                 Y[dest_idx,...] = Y_dset[source_idx,...]
-            
-            X.attrs['axes'] = X_dset.attrs['axes']
-            Y.attrs['axes'] = Y_dset.attrs['axes']
+                        
+            for k in iter(X_dset.attrs):
+                X.attrs[k] = X_dset.attrs[k]
+            for k in iter(Y_dset.attrs):
+                Y.attrs[k] = Y_dset.attrs[k]
 
 
 # Data Wrapper
