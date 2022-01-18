@@ -63,13 +63,13 @@ def loss_hdr(mean=True):
     R = _mean_or_not(mean)
     if backend_channels_last():
         def hdr(y_true, y_pred):
-            n = K.shape(y_true)[-1]            
-            return R(K.square(y_true - y_pred[...,:n])/K.square(K.stop_gradient(y_pred[...,:n] + 0.01)))
+            n = K.shape(y_true)[-1]
+            return K.sum(K.abs(K.tanh(y_pred[...,:n])-K.tanh(y_true)))
         return hdr
     else:
         def hdr(y_true, y_pred):
             n = K.shape(y_true)[1]
-            return R(K.square(y_true - y_pred[:,:n,...])/K.square(K.stop_gradient(y_pred[:,:n,...] + 0.01)))
+            return K.sum(K.abs(K.tanh(y_pred[:,:n,...])-K.tanh(y_true)))
         return hdr
 
 def loss_thresh_weighted_decay(loss_per_pixel, thresh, w1, w2, alpha):

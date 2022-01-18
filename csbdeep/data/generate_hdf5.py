@@ -276,9 +276,18 @@ class HDF5Data():
     @staticmethod
     def from_hdf5(file, validation_split=0, channels=slice(None,), shuffled_read=True):
         assert 0 <= validation_split < 1        
+        print(f"Loading data from: {file}")
         hdf5file = h5py.File(file, 'r')
         X_dset = hdf5file['X']
         Y_dset = hdf5file['Y']
+
+        print(f"Attributes for dataset X:")
+        for k in iter(X_dset.attrs):
+            print(f"    {k}:    {str(X_dset.attrs[k])}")
+        print(f"Attributes for dataset Y:")
+        for k in iter(Y_dset.attrs):
+            print(f"    {k}:    {str(Y_dset.attrs[k])}")
+
         len(X_dset) == len(Y_dset) or _raise(ValueError("X and Y must have same length"))
         n_samples = len(X_dset)
         hdf5file.close()

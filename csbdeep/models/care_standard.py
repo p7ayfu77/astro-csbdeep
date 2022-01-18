@@ -106,7 +106,7 @@ class CARE(BaseModel):
         """
         if optimizer is None:
             Adam = keras_import('optimizers', 'Adam')
-            optimizer = Adam(lr=self.config.train_learning_rate)
+            optimizer = Adam(learning_rate=self.config.train_learning_rate)
         self.callbacks = train.prepare_model(self.keras_model, optimizer, self.config.train_loss, **kwargs)
 
         if self.basedir is not None:

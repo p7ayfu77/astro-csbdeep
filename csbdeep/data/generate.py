@@ -158,7 +158,7 @@ def sample_percentiles(pmin=(1,3), pmax=(99.5,99.9)):
     pmin[1] < pmax[0] or _raise(ValueError())
     return lambda: (np.random.uniform(*pmin), np.random.uniform(*pmax))
 
-def norm_percentiles(percentiles=sample_percentiles(), relu_last=False):
+def norm_percentiles(percentiles=sample_percentiles(), relu_last=False, with_params=False):
     """Normalize extracted patches based on percentiles from corresponding raw image.
 
     Parameters
@@ -204,9 +204,13 @@ def norm_percentiles(percentiles=sample_percentiles(), relu_last=False):
         patches_y_norm = normalize_mi_ma(patches_y, _perc(y,pmins), _perc(y,pmaxs))
         return patches_x_norm, patches_y_norm
 
-    return _normalize
+    if with_params:
+        norm_params = ""
+        return _normalize, norm_params    
+    else:
+        return _normalize    
 
-def norm_reinhard(normalize_targets=False):
+def norm_reinhard(normalize_targets=False, with_params=False):
     """Normalize extracted patches based on modified Reinhard formula from: `Noise2Noise: Learning Image Restoration without Clean Data`
     https://arxiv.org/abs/1803.04189
     Best suited to HDR images
@@ -232,9 +236,13 @@ def norm_reinhard(normalize_targets=False):
 
         return patches_x_norm, patches_y_norm
 
-    return _normalize
+    if with_params:
+        norm_params = f"{'RawTarget' if not normalize_targets else ''}"
+        return _normalize, norm_params    
+    else:
+        return _normalize    
 
-def norm_stf(C=-4.0,B=0.185, normalize_targets=True):
+def norm_stf(C=-4.0,B=0.185, normalize_targets=True, with_params=False):
        
     def _normalize(patches_x,patches_y, x,y,mask,channel):
         
@@ -253,9 +261,13 @@ def norm_stf(C=-4.0,B=0.185, normalize_targets=True):
 
         return patches_x_norm, patches_y_norm
 
-    return _normalize
+    if with_params:
+        norm_params = f"{C}_{B}{'_RawTarget' if not normalize_targets else ''}"
+        return _normalize, norm_params    
+    else:
+        return _normalize
 
-def norm_simple(normalize_targets=True):
+def norm_simple(normalize_targets=True, with_params=False):
        
     def _normalize(patches_x,patches_y, x,y,mask,channel):
         
@@ -270,7 +282,11 @@ def norm_simple(normalize_targets=True):
 
         return patches_x_norm, patches_y_norm
 
-    return _normalize
+    if with_params:
+        norm_params = f"{'RawTarget' if not normalize_targets else ''}"
+        return _normalize, norm_params    
+    else:
+        return _normalize    
 
 def create_patches(
         raw_data,
