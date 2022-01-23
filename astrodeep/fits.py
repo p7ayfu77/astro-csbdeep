@@ -13,7 +13,7 @@ def read_fits(path):
     headers = hdul[0].header
     return data, headers
 
-def write_fits(path, data, headers):
+def write_fits(path, data, headers,overwrite=True):
     """
     Writes fits data to file
 
@@ -30,4 +30,4 @@ def write_fits(path, data, headers):
     """
     hdu = fits.PrimaryHDU(data=data, header=headers)
     hdul = fits.HDUList([hdu])
-    hdul.writeto(path, overwrite=True)
+    hdul.writeto(path, overwrite=overwrite,output_verify='ignore')
