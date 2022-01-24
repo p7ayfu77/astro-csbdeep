@@ -1,5 +1,6 @@
 from astropy.io import fits
 
+
 def read_fits(path):
     """
     Reads fits data and header from a fits file
@@ -13,9 +14,13 @@ def read_fits(path):
     headers = hdul[0].header
     return data, headers
 
-def write_fits(path, data, headers,overwrite=True):
+
+def write_fits(path, data, headers, overwrite=True):
     """
     Writes fits data to file
+
+    :param overwrite: boolean
+            Whether to overwrite the data if `path` exists
 
     :param path: str, file-like or `pathlib.Path`
             File to write to.  If a file object, must be opened in a
@@ -30,4 +35,4 @@ def write_fits(path, data, headers,overwrite=True):
     """
     hdu = fits.PrimaryHDU(data=data, header=headers)
     hdul = fits.HDUList([hdu])
-    hdul.writeto(path, overwrite=overwrite,output_verify='ignore')
+    hdul.writeto(path, overwrite=overwrite, output_verify='ignore')
