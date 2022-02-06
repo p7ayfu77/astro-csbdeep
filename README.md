@@ -20,8 +20,11 @@ You will need a few things to get started:
 
 Key Dependencies are:
 
-* jupyter
-* tensorflow-gpu
+* python:3.7-3.9
+* cuDNN:8.1
+* CUDA:11.2
+* jupyter:1.0.0
+* tensorflow-gpu:2.7.0
 
 Please check the `requirements.txt` file for versions of the above and other packages used to test the example Jupyter Notebook.
 
