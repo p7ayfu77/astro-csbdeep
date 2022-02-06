@@ -58,9 +58,10 @@ class HDF5CARE(CARE):
 
         if (self.config.train_tensorboard and self.basedir is not None and
             not IS_TF_1 and not any(isinstance(cb,CARETensorBoardImage) for cb in self.callbacks)):
-            self.callbacks.append(CARETensorBoardImage(model=self.keras_model, data=validation_data,
+            n_images=3
+            self.callbacks.append(CARETensorBoardImage(model=self.keras_model, data=validation_data[:n_images],
                                                        log_dir=str(self.logdir/'logs'/'images'),
-                                                       n_images=3, prob_out=self.config.probabilistic))
+                                                       n_images=n_images, prob_out=self.config.probabilistic))
 
         training_data = train_hdf5.HDF5DataWrapper(XY_data, self.config.train_batch_size, length=epochs*steps_per_epoch)
         validation_data = train_hdf5.HDF5DataWrapper(validation_data, self.config.train_batch_size, length=int(np.ceil(len(validation_data)/self.config.train_batch_size)))

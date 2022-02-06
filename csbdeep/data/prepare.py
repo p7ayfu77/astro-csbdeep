@@ -90,6 +90,10 @@ class NoNormalizer(Normalizer):
     def do_after(self):
         return self._do_after
 
+    @property
+    def params(self):
+        return f"{self.__class__.__name__}"
+
 
 class PercentileNormalizer(Normalizer):
     """Percentile-based image normalization.
@@ -156,6 +160,10 @@ class PercentileNormalizer(Normalizer):
         """``do_after`` parameter from constructor."""
         return self._do_after
 
+    @property
+    def params(self):
+        return f"{self.__class__.__name__}_{self.pmin}_{self.pmax}"
+
 
 class ReinhardNormalizer(Normalizer):
 
@@ -202,6 +210,11 @@ class STFNormalizer(Normalizer):
     @property
     def do_after(self):
         return self._do_after
+
+    @property
+    def params(self):
+        return f"{self.__class__.__name__}_{self.C}_{self.B}"
+
 
 class SimpleNormalizer(Normalizer):
 
@@ -341,8 +354,6 @@ class PadAndCropResizer(Resizer):
         return x[crop]
 
 
-from colour_hdri import tonemapping_operator_Reinhard2004
-
 @add_metaclass(ABCMeta)
 class PreProcessor():
     """Abstract base class for Pre-processor methods."""
@@ -445,7 +456,7 @@ class ReinhardPreProcessor(PreProcessor):
         self.kwargs = kwargs
 
     def before(self, x, axes):
-        return tonemapping_operator_Reinhard2004(x, **self.kwargs)
+        return pow(x/(1+x),1/2.2)
 
     def after(self, mean, scale, axes):
         self.do_after or _raise(ValueError())
