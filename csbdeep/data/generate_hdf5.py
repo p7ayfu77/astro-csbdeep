@@ -302,8 +302,10 @@ class HDF5Data():
             assert 0 < n_val and 0 < n_train
             val_idx = shuffle_indx[-n_val:]
             train_idx = shuffle_indx[:n_train]
-
-        return HDF5Data(file, sample_indx=train_idx, channels=channels), HDF5Data(file, sample_indx=val_idx, channels=channels)
+            
+            return HDF5Data(file, sample_indx=train_idx, channels=channels), HDF5Data(file, sample_indx=val_idx, channels=channels)
+        else:
+            return HDF5Data(file, sample_indx=shuffle_indx, channels=channels)
 
 
     def __init__(self, file, sample_indx=None,channels=slice(None,)):
