@@ -1,0 +1,322 @@
+#:kivy 2.0.0
+#:import utils kivy.utils
+
+<Label>:
+    font_size: '15sp'
+
+Root:
+    id: main
+    BoxLayout:
+        orientation: 'vertical'
+
+        GridLayout:
+            cols: 2
+            size: root.width, root.height
+
+            GridLayout:
+                rows: 13
+                #spacing: '8dp'
+                size_hint_x: None
+                width: '280dp'
+
+                Button:
+                    size_hint_y: None
+                    height: '38dp'
+                    id: my_widget
+                    text: "Load Image..."
+                    on_release: root.show_load()
+
+                GridLayout:
+                    size_hint_y: None
+                    rows: 2
+                    
+                    Label:
+                        text: 'Re-scale Image'
+                    
+                    BoxLayout:                    
+
+                        MySlider:
+                            size_hint_x: None                        
+                            width: 160
+                            id: s4
+                            min: 1
+                            max: 4
+                            value: 1
+                            step: 1
+                            on_slider_release: root.update_sizing(self.value)
+
+                        Label:
+                            text: '1/{:.2f}'.format(s4.value)
+
+                BoxLayout:                    
+                    size_hint_y: None
+                    height: '38dp'
+
+                    Label:
+                        text: 'Normalize'
+
+                    CheckBox:
+                        size_hint_y: None
+                        height: '38dp'
+                        on_active: root.normalize_check(self, self.active)
+                        active: main.normalize_enabled
+
+                GridLayout:
+                    size_hint_y: None
+                    rows: 2
+                    
+                    Label:
+                        text: 'Stretch: C'
+                    
+                    BoxLayout:
+
+                        MySlider:
+                            size_hint_x: None                        
+                            width: 160
+                            id: s1
+                            min: -4
+                            max: 0
+                            step: 0.1
+                            value: -2.8
+                            on_slider_release: root.update_C(self.value)
+
+                        Label:
+                            text: '{:.3f}'.format(s1.value)
+
+                GridLayout:
+                    size_hint_y: None
+                    rows: 2
+                    
+                    Label:
+                        text: 'Stretch: B'
+                    
+                    BoxLayout:                    
+
+                        MySlider:
+                            size_hint_x: None                        
+                            width: 160
+                            id: s2
+                            min: 0
+                            max: 1
+                            value: 0.25
+                            step: 0.005
+                            on_slider_release: root.update_B(self.value)
+
+                        Label:
+                            text: '{:.3f}'.format(s2.value)
+
+                GridLayout:
+                    size_hint_y: None
+                    rows: 2
+                    
+                    Label:
+                        text: 'Expland Low'
+                    
+                    BoxLayout:                    
+
+                        MySlider:
+                            size_hint_x: None                        
+                            width: 160
+                            id: s5
+                            min: 0
+                            max: 0.5
+                            value: 0.00
+                            step: 0.01
+                            on_slider_release: root.update_low(self.value)
+
+                        Label:
+                            text: '{:.3f}'.format(s5.value)
+
+                ProgressBar:
+                    id: pb
+                    size_hint_x: .5
+                    size_hint_y: None
+                    height: '5dp'
+                    value_normalized: main.progress
+
+                GridLayout:
+                    size_hint_y: None
+                    rows: 2
+                    
+                    Label:
+                        text: 'Denoise Model'
+                    
+                    Spinner:
+                        text: main.selected_model
+                        values: main.models
+                        size_hint_y: None
+                        height: '38dp'
+                        on_text: root.update_model(self.text)
+                        shorten: True
+                        halign: 'left'
+                        valign: 'middle'
+                        padding_x: '5dp'
+                        text_size: self.size
+
+                GridLayout:
+                    size_hint_y: None
+                    rows: 2
+                    
+                    Label:
+                        text: 'Tiling'
+                    
+                    BoxLayout:                    
+
+                        MySlider:
+                            size_hint_x: None                        
+                            width: 160
+                            id: s3
+                            min: 1
+                            max: 4
+                            value: 2
+                            step: 1
+                            on_slider_release: root.update_tilling(self.value)
+
+                        Label:
+                            text: '{:.3f}'.format(s3.value)
+
+                BoxLayout:                    
+                    size_hint_y: None
+                    height: '38dp'
+
+                    Label:
+                        text: 'Auto Update'
+
+                    CheckBox:
+                        size_hint_y: None
+                        height: '38dp'
+                        on_active: root.autoupdate_check(self, self.active)
+                        active: main.autoupdate_enabled
+
+                    Button:
+                        size_hint_y: None
+                        height: '38dp'
+                        id: my_widget_process
+                        text: "Process"
+                        on_release: root.process_now()
+
+                BoxLayout:                    
+                    size_hint_y: None
+                    height: '38dp'
+
+                    Label:
+                        text: 'Denoise'
+
+                    CheckBox:
+                        size_hint_y: None
+                        height: '38dp'
+                        on_active: root.denoise_check(self, self.active)
+                        active: main.denoise_enabled
+
+                Button:
+                    size_hint_y: None
+                    height: '38dp'
+                    text: "Save Image as..."
+                    on_release: root.show_save()
+
+                BoxLayout:
+                    orientation: 'vertical'                 
+                    size_hint_y: None
+                    #height: '38dp'
+
+                    Label:
+                        text: 'Image Info:'
+                    Label:
+                        text: 'WxH:{}'.format(main.imageout.size) if main.imageout else 'WxH:(0,0)'
+                        halign: 'left'
+                        shorten: True
+                        halign: 'left'
+                        padding_x: '5dp'
+                        text_size: self.size
+                    Label:
+                        text: 'Model:{}'.format(main.selected_model) if main.selected_model else 'Model:None'
+                        shorten: True
+                        halign: 'left'
+                        padding_x: '5dp'
+                        text_size: self.size
+
+
+            MyZoomFloatLayout:
+                id: myzoom
+                imageout: main.imageout
+                imageoutzoom: imageout
+                Image:
+                    id: imageout
+                    allow_stretch: True
+
+        ActionBar:
+            ActionView:
+                spacing: 5
+                id: av
+                ActionPrevious:
+                    title: 'AstroDenoisePy'
+
+
+                ActionToggleButton:
+                    text: 'Show Original'                    
+                    icon: 'astrodenoisepy/data/eye-outline.png'
+                    state: 'down' if main.denoise_enabled else 'normal'
+                    on_release: main.denoise_enabled = True if self.state == 'down' else False
+                
+                ActionSeparator:
+                ActionSeparator:
+
+                ActionButton:
+                    text: 'Open...'
+                    icon: 'astrodenoisepy/data/file-outline.png'
+                    on_release: root.show_load()
+
+                ActionButton:
+                    text: 'Save as...'
+                    icon: 'astrodenoisepy/data/save-outline.png'
+                    on_release: root.show_save()
+
+<LoadDialog>:
+    BoxLayout:
+        size: root.size
+        pos: root.pos
+        orientation: "vertical"
+        FileChooserListView:
+            id: filechooser
+            filters: ['*.tif','*.tiff','*.fit','*.fits']
+            path: app.lastpath
+
+        BoxLayout:
+            size_hint_y: None
+            height: 30
+            Button:
+                text: "Cancel"
+                on_release: root.cancel()
+
+            Button:
+                text: "Load"
+                on_release: root.load(filechooser.path, filechooser.selection)
+
+<SaveDialog>:
+    text_input: text_input
+    BoxLayout:
+        size: root.size
+        pos: root.pos
+        orientation: "vertical"
+        FileChooserListView:
+            id: filechooser
+            filters: ['*.tif','*.tiff','*.fit','*.fits']
+            on_selection: text_input.text = self.selection and self.selection[0] or ''
+            path: app.lastpath
+
+        TextInput:
+            id: text_input
+            size_hint_y: None
+            height: 30
+            multiline: False
+
+        BoxLayout:
+            size_hint_y: None
+            height: 30
+            Button:
+                text: "Cancel"
+                on_release: root.cancel()
+
+            Button:
+                text: "Save"
+                on_release: root.save(filechooser.path, text_input.text)

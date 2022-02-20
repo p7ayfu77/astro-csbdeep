@@ -76,11 +76,12 @@ class NoNormalizer(Normalizer):
         If :func:`after` is called, but parameter `do_after` was set to ``False`` in the constructor.
     """
 
-    def __init__(self, do_after=False):
+    def __init__(self, expand_low=0, do_after=False):
         self._do_after = do_after
+        self.expand_low = expand_low
 
     def before(self, x, axes):
-        return x
+        return x + self.expand_low
 
     def after(self, mean, scale, axes):
         self.do_after or _raise(ValueError())
@@ -184,15 +185,16 @@ class ReinhardNormalizer(Normalizer):
 
 class STFNormalizer(Normalizer):
 
-    def __init__(self, C=-4.0, B=0.185, do_after=True):
+    def __init__(self, C=-4.0, B=0.185, expand_low=0, do_after=True):
         self._do_after = do_after
         self.C = C
         self.B = B
+        self.expand_low = expand_low
 
     def before(self, x, axes):
         axis = tuple(d for d,a in enumerate(axes) if a != 'C')
         _x, self.m, self.c = STFPreProcessor.stf(x, self.C, self.B, axis)
-        return _x
+        return _x + self.expand_low
 
     def norm(self,data):
         return (data - np.min(data)) / (np.max(data) - np.min(data))
