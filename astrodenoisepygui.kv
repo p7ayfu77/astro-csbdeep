@@ -1,146 +1,154 @@
 #:kivy 2.0.0
 #:import utils kivy.utils
+#:import np numpy
+
+<Separator@Widget>:
+    rgba: 1, 1, 1, 1
+    canvas:
+        Color:
+            rgba: self.rgba
+        Rectangle:
+            pos: self.pos
+            size: self.size
+
+<VSeparator@Separator>:
+    size_hint_x: None
+    width: dp(2)
+
+<HSeparator@Separator>:
+    size_hint_y: None
+    height: dp(2)
 
 <Label>:
     font_size: '15sp'
+
+<MySliderTextInput@TextInput>:
+    size_hint_x: None
+    width: 65
+    pos_hint: {'top': 0.8}
 
 Root:
     id: main
     BoxLayout:
         orientation: 'vertical'
-
         GridLayout:
             cols: 2
             size: root.width, root.height
-
             GridLayout:
-                rows: 13
+                rows: 15
                 #spacing: '8dp'
                 size_hint_x: None
                 width: '280dp'
-
                 Button:
                     size_hint_y: None
                     height: '38dp'
                     id: my_widget
                     text: "Load Image..."
                     on_release: root.show_load()
-
                 GridLayout:
                     size_hint_y: None
                     rows: 2
-                    
                     Label:
                         text: 'Re-scale Image'
-                    
                     BoxLayout:                    
-
                         MySlider:
-                            size_hint_x: None                        
-                            width: 160
                             id: s4
                             min: 1
                             max: 4
-                            value: 1
+                            value: main.sizing
                             step: 1
-                            on_slider_release: root.update_sizing(self.value)
-
-                        Label:
-                            text: '1/{:.2f}'.format(s4.value)
-
+                            on_slider_release: main.sizing = self.value
+                        MySliderTextInput:
+                            size_hint_y: None
+                            halign: 'right'
+                            multiline: False
+                            text: '{:n}'.format(s4.value)
+                            on_text_validate: main.sizing = str(np.clip(float(self.text),s4.min,s4.max))
+                            input_filter: 'int'
+                            height: 30
                 BoxLayout:                    
                     size_hint_y: None
                     height: '38dp'
-
                     Label:
                         text: 'Normalize'
-
                     CheckBox:
                         size_hint_y: None
                         height: '38dp'
                         on_active: root.normalize_check(self, self.active)
                         active: main.normalize_enabled
-
                 GridLayout:
                     size_hint_y: None
                     rows: 2
-                    
                     Label:
-                        text: 'Stretch: C'
-                    
+                        text: 'STF Stretch C (Low Clipping)'
                     BoxLayout:
-
                         MySlider:
-                            size_hint_x: None                        
-                            width: 160
                             id: s1
                             min: -4
                             max: 0
                             step: 0.1
-                            value: -2.8
-                            on_slider_release: root.update_C(self.value)
-
-                        Label:
+                            value: main.stfC
+                            on_slider_release: main.stfC = self.value
+                        MySliderTextInput:
+                            size_hint_y: None
+                            halign: 'right'
+                            multiline: False
                             text: '{:.3f}'.format(s1.value)
-
+                            on_text_validate: main.stfC = '{:.3f}'.format(np.clip(float(self.text),s1.min,s1.max))
+                            input_filter: 'float'
+                            height: 30
                 GridLayout:
                     size_hint_y: None
                     rows: 2
-                    
                     Label:
-                        text: 'Stretch: B'
-                    
+                        text: 'STF Stretch B (Strength)'
                     BoxLayout:                    
-
                         MySlider:
-                            size_hint_x: None                        
-                            width: 160
                             id: s2
                             min: 0
                             max: 1
-                            value: 0.25
+                            value: main.stfB
                             step: 0.005
-                            on_slider_release: root.update_B(self.value)
-
-                        Label:
+                            on_slider_release: main.stfB = self.value
+                        MySliderTextInput:
+                            size_hint_y: None
+                            halign: 'right'
+                            multiline: False
                             text: '{:.3f}'.format(s2.value)
-
+                            on_text_validate: main.stfB = '{:.3f}'.format(np.clip(float(self.text),s2.min,s2.max))
+                            input_filter: 'float'
+                            height: 30
                 GridLayout:
                     size_hint_y: None
                     rows: 2
-                    
                     Label:
                         text: 'Expland Low'
-                    
                     BoxLayout:                    
-
                         MySlider:
-                            size_hint_x: None                        
-                            width: 160
                             id: s5
                             min: 0
                             max: 0.5
-                            value: 0.00
+                            value: main.expand_low
                             step: 0.01
-                            on_slider_release: root.update_low(self.value)
-
-                        Label:
+                            on_slider_release: main.expand_low = self.value
+                        MySliderTextInput:
+                            size_hint_y: None
+                            halign: 'right'
+                            multiline: False
                             text: '{:.3f}'.format(s5.value)
-
-                ProgressBar:
-                    id: pb
-                    size_hint_x: .5
+                            on_text_validate: main.expand_low = '{:.3f}'.format(np.clip(float(self.text),s5.min,s5.max))
+                            input_filter: 'float'
+                            height: 30
+                Button:
                     size_hint_y: None
-                    height: '5dp'
-                    value_normalized: main.progress
-
+                    height: '19dp'
+                    text: "Reset"
+                    on_release: root.reset_sliders()
                 GridLayout:
                     size_hint_y: None
                     rows: 2
-                    
                     Label:
                         text: 'Denoise Model'
-                    
                     Spinner:
                         text: main.selected_model
                         values: main.models
@@ -152,73 +160,71 @@ Root:
                         valign: 'middle'
                         padding_x: '5dp'
                         text_size: self.size
-
                 GridLayout:
                     size_hint_y: None
                     rows: 2
-                    
                     Label:
-                        text: 'Tiling'
-                    
+                        text: 'Denoise Tiling'
                     BoxLayout:                    
-
                         MySlider:
-                            size_hint_x: None                        
-                            width: 160
                             id: s3
                             min: 1
                             max: 4
-                            value: 2
+                            value: main.tilling
                             step: 1
-                            on_slider_release: root.update_tilling(self.value)
-
-                        Label:
-                            text: '{:.3f}'.format(s3.value)
-
+                            on_slider_release: main.tilling = self.value
+                        MySliderTextInput:
+                            size_hint_y: None
+                            halign: 'right'
+                            multiline: False
+                            text: '{:n}'.format(s3.value)
+                            on_text_validate: main.tilling = str(np.clip(float(self.text),s3.min,s3.max))
+                            input_filter: 'int'
+                            height: 30
                 BoxLayout:                    
                     size_hint_y: None
                     height: '38dp'
-
                     Label:
                         text: 'Auto Update'
-
                     CheckBox:
                         size_hint_y: None
                         height: '38dp'
                         on_active: root.autoupdate_check(self, self.active)
                         active: main.autoupdate_enabled
-
                     Button:
                         size_hint_y: None
                         height: '38dp'
                         id: my_widget_process
                         text: "Process"
                         on_release: root.process_now()
-
                 BoxLayout:                    
                     size_hint_y: None
                     height: '38dp'
-
                     Label:
                         text: 'Denoise'
-
                     CheckBox:
                         size_hint_y: None
                         height: '38dp'
                         on_active: root.denoise_check(self, self.active)
                         active: main.denoise_enabled
-
+                ProgressBar:
+                    id: pb
+                    size_hint_x: .5
+                    size_hint_y: None
+                    height: '5dp'
+                    value_normalized: main.progress
+                HSeparator:
+                    rgba: 1, 1, 1, 0
+                    height: dp(10)
                 Button:
+                    pos_hint: {'top': 0.8}
                     size_hint_y: None
                     height: '38dp'
                     text: "Save Image as..."
                     on_release: root.show_save()
-
                 BoxLayout:
                     orientation: 'vertical'                 
                     size_hint_y: None
-                    #height: '38dp'
-
                     Label:
                         text: 'Image Info:'
                     Label:
@@ -234,8 +240,6 @@ Root:
                         halign: 'left'
                         padding_x: '5dp'
                         text_size: self.size
-
-
             MyZoomFloatLayout:
                 id: myzoom
                 imageout: main.imageout
@@ -243,29 +247,23 @@ Root:
                 Image:
                     id: imageout
                     allow_stretch: True
-
         ActionBar:
             ActionView:
                 spacing: 5
                 id: av
                 ActionPrevious:
                     title: 'AstroDenoisePy'
-
-
                 ActionToggleButton:
                     text: 'Show Original'                    
                     icon: 'astrodenoisepy/data/eye-outline.png'
                     state: 'down' if main.denoise_enabled else 'normal'
                     on_release: main.denoise_enabled = True if self.state == 'down' else False
-                
                 ActionSeparator:
                 ActionSeparator:
-
                 ActionButton:
                     text: 'Open...'
                     icon: 'astrodenoisepy/data/file-outline.png'
                     on_release: root.show_load()
-
                 ActionButton:
                     text: 'Save as...'
                     icon: 'astrodenoisepy/data/save-outline.png'
@@ -276,18 +274,31 @@ Root:
         size: root.size
         pos: root.pos
         orientation: "vertical"
+        BoxLayout:
+            size_hint_y: None
+            height: 30
+            Label:
+                text: 'Path:'
+                size_hint_x: self.text_size[0]
+                size_hint_y: None
+                height: 30
+            TextInput:
+                id: path_input
+                size_hint_y: None
+                height: 30
+                multiline: False
+                text: filechooser.path
+                on_text_validate: filechooser.path = self.text
         FileChooserListView:
             id: filechooser
-            filters: ['*.tif','*.tiff','*.fit','*.fits']
+            filters: ['*.tif','*.tiff','*.fit','*.fits','*.fts']
             path: app.lastpath
-
         BoxLayout:
             size_hint_y: None
             height: 30
             Button:
                 text: "Cancel"
                 on_release: root.cancel()
-
             Button:
                 text: "Load"
                 on_release: root.load(filechooser.path, filechooser.selection)
@@ -303,20 +314,18 @@ Root:
             filters: ['*.tif','*.tiff','*.fit','*.fits']
             on_selection: text_input.text = self.selection and self.selection[0] or ''
             path: app.lastpath
-
         TextInput:
             id: text_input
             size_hint_y: None
             height: 30
             multiline: False
-
+            on_text_validate: filechooser.path = self.text
         BoxLayout:
             size_hint_y: None
             height: 30
             Button:
                 text: "Cancel"
                 on_release: root.cancel()
-
             Button:
                 text: "Save"
                 on_release: root.save(filechooser.path, text_input.text)

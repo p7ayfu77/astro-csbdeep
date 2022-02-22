@@ -1,3 +1,4 @@
+from queue import Empty
 import kivy
 kivy.require('2.0.0')
 from kivy.app import App
@@ -11,6 +12,7 @@ from kivy.core.window import Window
 from kivy.properties import *
 from kivy.graphics.texture import Texture
 from kivy.logger import Logger
+from kivy.clock import Clock
 
 import os
 import sys
@@ -20,8 +22,6 @@ import threading
 from pathlib import Path
 
 import numpy as np
-from PIL import Image as PILImage
-
 from tifffile import imread
 from astropy.io import fits
 import tensorflow as tf
@@ -64,7 +64,7 @@ class MySlider(Slider):
 
 class MyFloatLayout(FloatLayout):
     def __init__(self, **kwargs):
-        super(MyFloatLayout, self).__init__(**kwargs)
+        super(MyFloatLayout, self).__init__(**kwargs)        
         self.rawimagedata = None
         self.processedimagedata = None
         self.preprocessedimagedata = None
@@ -74,13 +74,15 @@ class MyFloatLayout(FloatLayout):
         self.processed = False     
         self.preprocessed = False
         self.fits_headers = None
+        self.process_trigger = Clock.create_trigger(self.process_now)
+        self.bind(stfC=self.process_trigger, stfB=self.process_trigger,tilling=self.process_trigger,expand_low=self.process_trigger)
 
     imageout = ObjectProperty(None)
     filetoload = StringProperty()
     stfC = NumericProperty(-2.8)
     stfB = NumericProperty(0.25)
-    predictT  = NumericProperty(2)
-    predictS  = NumericProperty(1)
+    tilling  = NumericProperty(2)
+    sizing  = NumericProperty(1)
     expand_low = NumericProperty(0)
     denoise_enabled = BooleanProperty(False)
     normalize_enabled = BooleanProperty(True)
@@ -101,6 +103,41 @@ class MyFloatLayout(FloatLayout):
                             size_hint=(0.9, 0.9))
         self._popup.open()
 
+    def load_now(self):
+        
+        if self.filetoload == '' or self.filetoload is None:
+            return
+
+        Window.set_system_cursor('wait')
+
+        loadthread = threading.Thread(target=self.load_callback)        
+        threading.excepthook = self.load_exception_callback        
+        loadthread.start()
+
+    def load_exception_callback(self,args):
+        e = args[1]
+        template = "An exception of type {0} occurred. Arguments:\n{1!r}"
+        message = template.format(type(e).__name__, e.args)
+        print (message)
+        print ("".join(traceback.format_exception(args[0], args[1], args[2])))
+        Window.set_system_cursor('arrow')
+
+    def load_callback(self):
+        result, headers = self.load_file_data(self.filetoload)
+        self.load_result(result, headers)
+
+    @mainthread
+    def load_result(self, result, headers):
+        Window.set_system_cursor('arrow')
+
+        self.rawimagedata = result
+        self.fits_headers = headers
+
+        self.imageout = False
+        self.processed = False
+        self.preprocessed = False        
+        self.process_now()
+
     def load_file_data(self, path):
 
         path = Path(path)
@@ -113,47 +150,41 @@ class MyFloatLayout(FloatLayout):
             print("Skipping unsupported format. Allowed formats: .tiff/.tif/.fits/.fit")
             return
         
-        self.fits_headers = headers
-
         if not np.issubdtype(data.dtype, np.float32):
             data = (data / np.iinfo(data.dtype).max).astype(np.float32)
 
         if data.ndim == 2:
             data = data[np.newaxis,...]
 
-        if self.predictS != 1:
-            self.rawimagedata = self._scale_down_up(data, self.predictS)
-        else:
-            self.rawimagedata = data
-        #(3, 1417, 2073)
+        if self.sizing != 1:
+            return self.resize_image(data, self.sizing), headers
 
-        print('Image Size:', data.shape)
-        print('Image Size:', self.rawimagedata.shape)
+        return data, headers
+
+    def resize_image(self,data,subsample):
+        zoom_order = 1
+        from scipy.ndimage.interpolation import zoom
+        factor = np.ones(data.ndim)
+        factor[1:3] = subsample
+        return zoom(data, [1, 1/subsample, 1/subsample], mode='nearest')
 
     def load(self, path, filename):
         
         App.get_running_app().lastpath = path
 
-        Window.set_system_cursor('wait')
         try:
             self.filetoload = os.path.join(path, filename[0])
-
-            self.load_file_data(self.filetoload)
         except Exception as e:
             template = "An exception of type {0} occurred. Arguments:\n{1!r}"
             message = template.format(type(e).__name__, e.args)
-            print (message)
-            
+            print (message)            
             return
         finally:
-            Window.set_system_cursor('arrow')
             self.dismiss_popup()
 
-        self.imageout = False
-        self.processed = False
-        self.preprocessed = False
+        self.sizing = 1
         self.denoise_enabled = False
-        self.process_now()
+        self.load_now()
 
     def save(self, path, filename):
 
@@ -168,7 +199,7 @@ class MyFloatLayout(FloatLayout):
         self.fits_headers['HISTORY'] = 'AstroDenoisePyGUI_STF_B {}'.format(self.stfB)
         self.fits_headers['HISTORY'] = 'AstroDenoisePyGUI_STF_Low {}'.format(self.expand_low)
         self.fits_headers['HISTORY'] = 'AstroDenoisePyGUI_Model {}'.format(self.selected_model)
-        self.fits_headers['HISTORY'] = 'AstroDenoisePyGUI_Scale {}'.format(self.predictS) 
+        self.fits_headers['HISTORY'] = 'AstroDenoisePyGUI_Scale {}'.format(self.sizing) 
         self.fits_headers['HISTORY'] = 'AstroDenoisePyGUI_Processed {}'.format(self.processed) 
         self.fits_headers['HISTORY'] = 'AstroDenoisePyGUI_AutoUpdate {}'.format(self.autoupdate_enabled)
         self.fits_headers['HISTORY'] = 'AstroDenoisePyGUI_Denoise {}'.format(self.denoise_enabled)
@@ -184,29 +215,32 @@ class MyFloatLayout(FloatLayout):
     def dismiss_popup(self):
         self._popup.dismiss()
 
-    def update_B(self,B):
-        self.stfB = B
+    def on_stfB(self, instance, value):
+        self.stfB = value
         self.processed = False
         self.preprocessed = False
-        self.process_now()
 
-    def update_C(self, C):
-        self.stfC = C
+    def on_stfC(self, instance, value):
+        self.stfC = value
         self.processed = False
         self.preprocessed = False        
-        self.process_now()
 
-    def update_low(self, L):
-        self.expand_low = L
+    def on_expand_low(self, instance, value):
+        self.expand_low = value
         self.processed = False
         self.preprocessed = False        
-        self.process_now()
 
-    def update_tilling(self, T):
-        self.predictT = T
+    def on_tilling(self, instance, value):
+        self.tilling = value
         self.processed = False
         self.preprocessed = False        
-        self.process_now()
+
+    def reset_sliders(self):
+        self.processed = False
+        self.preprocessed = False        
+        self.stfC = -2.8
+        self.stfB = 0.25
+        self.expand_low = 0
 
     def denoise_check(self, instance, value):        
         self.denoise_enabled = value
@@ -228,23 +262,11 @@ class MyFloatLayout(FloatLayout):
         self.preprocessed = False        
         self.process_now()
 
-    def update_sizing(self, S):
-        self.predictS = S
-        self.load_file_data(self.filetoload)
+    def on_sizing(self, instance, value):
+        self.sizing = value
+        self.load_now()
 
-        self.imageout = False
-        self.processed = False
-        self.preprocessed = False
-        self.process_now()
-
-    def _scale_down_up(self,data,subsample):
-        zoom_order = 1
-        from scipy.ndimage.interpolation import zoom
-        factor = np.ones(data.ndim)
-        factor[1:3] = subsample
-        return zoom(data, [1, 1/subsample, 1/subsample], mode='nearest')
-
-    def process_now(self):
+    def process_now(self, *largs):
         if self.autoupdate_enabled and self.rawimagedata is not None:
             
             if self.denoise_enabled and not self.processed:
@@ -290,7 +312,6 @@ class MyFloatLayout(FloatLayout):
         else:
             self.preprocessedimagedata = result
             self.preprocessed = True
-        #(1417, 2073, 3)
 
         image = (result - np.min(result)) / (np.max(result) - np.min(result))
         image = (image * 255 / np.max(image)).astype('uint8')
@@ -320,20 +341,16 @@ class MyFloatLayout(FloatLayout):
                 axes = 'YX'
                 model = CARE(config=None, name=self.selected_model, basedir=self.models_basedir)
                 output_denoised = []
-                #(3, 1417, 2073)
                 for i, c in enumerate(data):
                     output_denoised.append(
-                        model.predict(c, axes, normalizer=normalizer,resizer=PadAndCropResizer(), n_tiles = (self.predictT,self.predictT))
+                        model.predict(c, axes, normalizer=normalizer,resizer=PadAndCropResizer(), n_tiles = (self.tilling,self.tilling))
                         )
                     self.update_progress((i+1)/len(data))
             result = np.moveaxis(np.transpose(output_denoised),0,1)
-            #(1417, 2073, 3)
         else:
             result = normalizer.before(np.moveaxis(np.transpose(data),0,1),'YX')
-            #(1417, 2073, 3)
             self.update_progress(1)
 
-        print(result.shape)
         return result 
 
 class MyZoomFloatLayout(AnchorLayout):
@@ -342,8 +359,6 @@ class MyZoomFloatLayout(AnchorLayout):
     region_w = NumericProperty(0)
     region_h = NumericProperty(0)
     scale = NumericProperty(1)
-    #region_w_orig = NumericProperty(640)
-    #region_h_orig = NumericProperty(480)
     imageoutzoom = ObjectProperty(None)
     imageout = ObjectProperty(None)
 

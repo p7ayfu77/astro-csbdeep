@@ -7,6 +7,8 @@ __pycache__/
 .pytest_cache
 *.egg-info/
 build/
+dist/
+dist-gui/
 astrodenoisepy/dist/
 astrodenoisepy/dist-gui/
 docs/build/

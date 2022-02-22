@@ -2,7 +2,7 @@ import sys
 from cx_Freeze import setup, Executable
 
 build_exe_options = {
-    "build_exe": "astrodenoisepy\\guidist",
+    "build_exe": "astrodenoisepy\\dist-gui",
     "packages": ["kivy"],
     "include_files": [
         "LICENSE.txt",
@@ -51,7 +51,7 @@ build_exe_options = {
 
 setup(
     name="astrodenoisepygui",
-    version="0.1",
+    version="0.2",
     options={"build_exe": build_exe_options},
     description="astrodenoisepygui",
     executables=[Executable("astrodenoisepygui.py")]
