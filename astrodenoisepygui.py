@@ -22,7 +22,7 @@ import threading
 from pathlib import Path
 
 import numpy as np
-from tifffile import imread
+from tifffile import imread, imsave
 from astropy.io import fits
 import tensorflow as tf
 from csbdeep.data import NoNormalizer, STFNormalizer, PadAndCropResizer
@@ -142,12 +142,12 @@ class MyFloatLayout(FloatLayout):
 
         path = Path(path)
 
-        if path.suffix in ['.fit','.fits']: 
+        if path.suffix in ['.fit','.fits','.fts']: 
             data, headers = read_fits(path)            
         elif path.suffix in ['.tif','.tiff']:
             data, headers = np.moveaxis(imread(path),-1,0), None            
         else:
-            print("Skipping unsupported format. Allowed formats: .tiff/.tif/.fits/.fit")
+            print("Skipping unsupported format. Allowed formats: .tiff/.tif/.fits/.fit/.fts")
             return
         
         if not np.issubdtype(data.dtype, np.float32):
@@ -204,13 +204,24 @@ class MyFloatLayout(FloatLayout):
         self.fits_headers['HISTORY'] = 'AstroDenoisePyGUI_AutoUpdate {}'.format(self.autoupdate_enabled)
         self.fits_headers['HISTORY'] = 'AstroDenoisePyGUI_Denoise {}'.format(self.denoise_enabled)
 
-        if filepath.suffix in ['.fit','.fits']:
-            result_forsave = np.moveaxis(np.transpose(self.processedimagedata),1,2)
-            write_fits(filepath,result_forsave,headers=self.fits_headers)
-        elif filepath.suffix in ['.tif','.tiff']:
-            pass
+        if self.denoise_enabled:
+            result_tosave = self.processedimagedata
+            self.processed = True
         else:
-            print("Skipping unsupported format. Allowed formats: .tiff/.tif/.fits/.fit")
+            result_tosave = self.preprocessedimagedata
+
+        try:
+            if filepath.suffix in ['.fit','.fits','.fts']:
+                result_forsave = np.moveaxis(np.transpose(result_tosave),1,2)
+                write_fits(filepath,result_forsave,headers=self.fits_headers)
+            elif filepath.suffix in ['.tif','.tiff']:
+                imsave(filepath,data=result_tosave)
+            else:
+                print("Skipping unsupported format. Allowed formats: .tiff/.tif/.fits/.fit/.fts")
+        except Exception as e:
+            template = "An exception of type {0} occurred. Arguments:\n{1!r}"
+            message = template.format(type(e).__name__, e.args)
+            print (message)            
 
     def dismiss_popup(self):
         self._popup.dismiss()
@@ -380,6 +391,9 @@ class MyZoomFloatLayout(AnchorLayout):
         if not self.collide_point(*touch.pos):
             return super().on_touch_down(touch)    
 
+        if self.imageout is None:
+            return True
+
         if touch.is_mouse_scrolling:
             if touch.button == 'scrolldown':
                 if self.scale < 10:
@@ -470,6 +484,8 @@ class AstroDenoisePyGUIApp(App):
         Window.size = (self.config.getint('graphics', 'width'),self.config.getint('graphics', 'height'))
 
         self.lastpath = self.config.get('astrodenoisepy', 'lastpath')
+        from kivy.config import Config
+        Config.set('input', 'mouse', 'mouse,disable_multitouch')
 
     def build_config(self, config):
         config.setdefaults('graphics', {

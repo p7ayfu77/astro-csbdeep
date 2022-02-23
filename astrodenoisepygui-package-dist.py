@@ -51,7 +51,7 @@ build_exe_options = {
 
 setup(
     name="astrodenoisepygui",
-    version="0.2",
+    version="0.2.2",
     options={"build_exe": build_exe_options},
     description="astrodenoisepygui",
     executables=[Executable("astrodenoisepygui.py")]

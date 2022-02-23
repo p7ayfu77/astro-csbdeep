@@ -1,6 +1,7 @@
 #:kivy 2.0.0
 #:import utils kivy.utils
 #:import np numpy
+#:import Path pathlib.Path
 
 <Separator@Widget>:
     rgba: 1, 1, 1, 1
@@ -311,7 +312,7 @@ Root:
         orientation: "vertical"
         FileChooserListView:
             id: filechooser
-            filters: ['*.tif','*.tiff','*.fit','*.fits']
+            filters: ['*.tif','*.tiff','*.fit','*.fits','*.fts']
             on_selection: text_input.text = self.selection and self.selection[0] or ''
             path: app.lastpath
         TextInput:
@@ -319,7 +320,7 @@ Root:
             size_hint_y: None
             height: 30
             multiline: False
-            on_text_validate: filechooser.path = self.text
+            on_text_validate: filechooser.path = str(Path(self.text).parent) if str(Path(self.text).parent) != filechooser.path and str(Path(self.text).parent) != '.' and Path(self.text).parent.exists() else filechooser.path
         BoxLayout:
             size_hint_y: None
             height: 30
