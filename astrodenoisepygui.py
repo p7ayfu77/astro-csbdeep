@@ -1,9 +1,9 @@
-from queue import Empty
 import kivy
 kivy.require('2.0.0')
 from kivy.app import App
 from kivy.uix.floatlayout import FloatLayout
 from kivy.uix.anchorlayout import AnchorLayout
+from kivy.uix.actionbar import ActionToggleButton
 from kivy.uix.slider import Slider
 from kivy.uix.popup import Popup
 from kivy.factory import Factory
@@ -28,15 +28,52 @@ import tensorflow as tf
 from csbdeep.data import NoNormalizer, STFNormalizer, PadAndCropResizer
 from csbdeep.models import CARE
 from astrodeep.utils.fits import read_fits, write_fits
+from astrodeep.filedialogs import save_file_dialog, open_file_dialog
+from operator import itemgetter
+
+import astrodenoisepyguiversion
+
+supported_save_formats_fits = ['.fit','.fits','.fts']
+supported_save_formats_tiff = ['.tif','.tiff']
+file_dialog_ext = [
+                ("Supported Image", "*.fit;*.fits;*.fts;*.FITS;*.FIT;*.FTS;*.tiff;*.tif;*.TIF;*.TIFF"),
+                ("TIF Image", "*.tiff;*.tif;*.TIF;*.TIFF"),
+                ("FITS Image", "*.fit;*.fits;*.fts;*.FITS;*.FIT;*.FTS")
+            ]
+
+def isWindows():
+    return sys.platform == 'win32'
 
 class LoadDialog(FloatLayout):
     load = ObjectProperty(None)
     cancel = ObjectProperty(None)
 
+    def sort_by_date(self, files, filesystem):
+        result = sorted(
+            zip(
+                files,
+                list(map(os.path.isdir, files)),
+                list(map(os.path.getmtime, files))
+            ),
+            key=itemgetter(1,2),
+            reverse=True)
+        return list(map(itemgetter(0),result))
+
 class SaveDialog(FloatLayout):
     save = ObjectProperty(None)
     text_input = ObjectProperty(None)
     cancel = ObjectProperty(None)
+
+    def sort_by_date(self, files, filesystem):
+        result = sorted(
+            zip(
+                files,
+                list(map(os.path.isdir, files)),
+                list(map(os.path.getmtime, files))
+            ),
+            key=itemgetter(1,2),
+            reverse=True)
+        return list(map(itemgetter(0),result))
 
 class MySlider(Slider):
     def __init__(self, **kwargs):
@@ -70,7 +107,7 @@ class MyFloatLayout(FloatLayout):
         self.preprocessedimagedata = None
         self.models_basedir = 'models'        
         self.models = os.listdir('models')        
-        self.selected_model = 'Default'
+        self.selected_model = 'default'
         self.processed = False     
         self.preprocessed = False
         self.fits_headers = None
@@ -90,18 +127,57 @@ class MyFloatLayout(FloatLayout):
     models = ObjectProperty(None)
     selected_model = StringProperty()
     progress = NumericProperty(0)
+    selected_device = StringProperty('GPU')
+    snapshotinfo = StringProperty()
+
+    def dismiss_popup(self):
+        self._popup.dismiss()
 
     def show_load(self):
-        content = LoadDialog(load=self.load, cancel=self.dismiss_popup)
-        self._popup = Popup(title="Load file", content=content,
-                            size_hint=(0.9, 0.9))
-        self._popup.open()    
+        
+        if isWindows():
+            path = open_file_dialog(
+                "Select FITS or TIFF image",
+                App.get_running_app().lastpath,
+                ext=file_dialog_ext)
 
-    def show_save(self):
-        content = SaveDialog(save=self.save, cancel=self.dismiss_popup)
-        self._popup = Popup(title="Save file", content=content,
-                            size_hint=(0.9, 0.9))
-        self._popup.open()
+            if path is None:
+                return
+
+            self.load(path) 
+        else:
+            content = LoadDialog(load=self.load, cancel=self.dismiss_popup)
+            self._popup = Popup(title="Load file", content=content,
+                                size_hint=(0.9, 0.9))
+            self._popup.open()    
+      
+    def load(self, path):
+        
+        if (isinstance(path,list) and len(path) == 0) or path is None:
+            return
+
+        if isinstance(path,list):
+            path = path[0]
+
+        App.get_running_app().lastpath = str(Path(path).parent)
+
+        try:
+            exists = Path(path).exists()
+            if not exists:
+                raise Exception(f"Path does not exists: {path}")
+            self.filetoload = path
+        except Exception as e:
+            template = "An exception of type {0} occurred. Arguments:\n{1!r}"
+            message = template.format(type(e).__name__, e.args)
+            print (message)            
+            return
+        finally:
+            if not isWindows():
+                self.dismiss_popup()
+
+        self.sizing = 1
+        self.denoise_enabled = False
+        self.load_now()
 
     def load_now(self):
         
@@ -124,6 +200,8 @@ class MyFloatLayout(FloatLayout):
 
     def load_callback(self):
         result, headers = self.load_file_data(self.filetoload)
+        if result is None:
+            return
         self.load_result(result, headers)
 
     @mainthread
@@ -141,14 +219,15 @@ class MyFloatLayout(FloatLayout):
     def load_file_data(self, path):
 
         path = Path(path)
+        extension = path.suffix.lower()
 
-        if path.suffix in ['.fit','.fits','.fts']: 
+        if extension in supported_save_formats_fits: 
             data, headers = read_fits(path)            
-        elif path.suffix in ['.tif','.tiff']:
+        elif extension in supported_save_formats_tiff:
             data, headers = np.moveaxis(imread(path),-1,0), None            
         else:
             print("Skipping unsupported format. Allowed formats: .tiff/.tif/.fits/.fit/.fts")
-            return
+            return None, None
         
         if not np.issubdtype(data.dtype, np.float32):
             data = (data / np.iinfo(data.dtype).max).astype(np.float32)
@@ -168,29 +247,31 @@ class MyFloatLayout(FloatLayout):
         factor[1:3] = subsample
         return zoom(data, [1, 1/subsample, 1/subsample], mode='nearest')
 
-    def load(self, path, filename):
-        
-        App.get_running_app().lastpath = path
+    def show_save(self):
 
-        try:
-            self.filetoload = os.path.join(path, filename[0])
-        except Exception as e:
-            template = "An exception of type {0} occurred. Arguments:\n{1!r}"
-            message = template.format(type(e).__name__, e.args)
-            print (message)            
-            return
-        finally:
+        if isWindows():
+            path = save_file_dialog(
+                        "Save FITS or TIFF image",
+                        App.get_running_app().lastpath,
+                        ext=file_dialog_ext)
+
+            if path is None:
+                return
+
+            self.save(path)         
+        else:
+            content = SaveDialog(save=self.save, cancel=self.dismiss_popup)
+            self._popup = Popup(title="Save file", content=content,
+                                size_hint=(0.9, 0.9))
+            self._popup.open()
+
+    def save(self, path):
+
+        if not isWindows():
             self.dismiss_popup()
 
-        self.sizing = 1
-        self.denoise_enabled = False
-        self.load_now()
-
-    def save(self, path, filename):
-
-        self.dismiss_popup()
-
-        filepath = Path(path,filename)
+        filepath = Path(path)
+        App.get_running_app().lastpath = str(filepath.parent)
 
         if self.fits_headers is None:
             self.fits_headers = fits.Header()
@@ -211,10 +292,14 @@ class MyFloatLayout(FloatLayout):
             result_tosave = self.preprocessedimagedata
 
         try:
-            if filepath.suffix in ['.fit','.fits','.fts']:
+            extension = filepath.suffix.lower()
+
+            if extension in supported_save_formats_fits:
                 result_forsave = np.moveaxis(np.transpose(result_tosave),1,2)
                 write_fits(filepath,result_forsave,headers=self.fits_headers)
-            elif filepath.suffix in ['.tif','.tiff']:
+            elif extension in supported_save_formats_tiff:
+                result_tosave = (result_tosave - np.min(result_tosave)) / (np.max(result_tosave) - np.min(result_tosave))
+                result_tosave = (result_tosave * np.iinfo(np.uint16).max).astype(np.uint16)
                 imsave(filepath,data=result_tosave)
             else:
                 print("Skipping unsupported format. Allowed formats: .tiff/.tif/.fits/.fit/.fts")
@@ -222,9 +307,6 @@ class MyFloatLayout(FloatLayout):
             template = "An exception of type {0} occurred. Arguments:\n{1!r}"
             message = template.format(type(e).__name__, e.args)
             print (message)            
-
-    def dismiss_popup(self):
-        self._popup.dismiss()
 
     def on_stfB(self, instance, value):
         self.stfB = value
@@ -273,31 +355,46 @@ class MyFloatLayout(FloatLayout):
         self.preprocessed = False        
         self.process_now()
 
+    def update_device(self,value):
+        self.selected_device = value
+        self.processed = False
+        self.preprocessed = False        
+        self.process_now()
+
     def on_sizing(self, instance, value):
         self.sizing = value
         self.load_now()
 
     def process_now(self, *largs):
-        if self.autoupdate_enabled and self.rawimagedata is not None:
-            
-            if self.denoise_enabled and not self.processed:
-                pass
-            elif self.denoise_enabled and self.processedimagedata is not None:
-                self.process_result(self.processedimagedata)
-                return
-            elif self.denoise_enabled and self.processedimagedata is None:
-                pass
-            elif not self.preprocessed:
-                pass
-            elif self.preprocessedimagedata is not None:
-                self.process_result(self.preprocessedimagedata)
-                return
 
-            Window.set_system_cursor('wait')
+        if not self.autoupdate_enabled:
+            return
 
-            processthread = threading.Thread(target=self.process_callback)
-            threading.excepthook = self.process_exception_callback
-            processthread.start()
+        self.start_process()
+
+    def start_process(self):
+
+        if self.rawimagedata is None:
+            return
+
+        if self.denoise_enabled and not self.processed:
+            pass
+        elif self.denoise_enabled and self.processedimagedata is not None:
+            self.process_result(self.processedimagedata)
+            return
+        elif self.denoise_enabled and self.processedimagedata is None:
+            pass
+        elif not self.preprocessed:
+            pass
+        elif self.preprocessedimagedata is not None:
+            self.process_result(self.preprocessedimagedata)
+            return
+
+        Window.set_system_cursor('wait')
+
+        processthread = threading.Thread(target=self.process_callback)
+        threading.excepthook = self.process_exception_callback
+        processthread.start()
     
     def process_exception_callback(self,args):
         e = args[1]
@@ -325,7 +422,7 @@ class MyFloatLayout(FloatLayout):
             self.preprocessed = True
 
         image = (result - np.min(result)) / (np.max(result) - np.min(result))
-        image = (image * 255 / np.max(image)).astype('uint8')
+        image = (image * 255).astype('uint8')
 
         colorfmt='rgb'
         if image.shape[2] == 1:            
@@ -348,7 +445,7 @@ class MyFloatLayout(FloatLayout):
         normalizer = STFNormalizer(C=C,B=B,expand_low=self.expand_low,do_after=False) if self.normalize_enabled else NoNormalizer(expand_low=self.expand_low)
 
         if self.denoise_enabled:
-            with tf.device(f"/GPU:0"):
+            with tf.device(f"/{self.selected_device}:0"):
                 axes = 'YX'
                 model = CARE(config=None, name=self.selected_model, basedir=self.models_basedir)
                 output_denoised = []
@@ -363,6 +460,65 @@ class MyFloatLayout(FloatLayout):
             self.update_progress(1)
 
         return result 
+
+    def show_compare(self,instance):
+        
+        if instance.state != 'down' and instance.last_touch.button == 'right':
+            snapshots = self.ids.av
+            snapshots.remove_widget(instance)
+            return
+        elif instance.state != 'down' and instance.last_touch.button == 'left':
+            self.process_trigger()
+            return
+        
+        import json
+        snapshotinfo = json.dumps(
+            instance.parameters,
+            ensure_ascii=True,
+            sort_keys=False,
+            indent=4)
+        self.snapshotinfo = snapshotinfo.replace('"','').replace(',','').replace('{','').replace('}','')
+        
+        result = instance.imagedata
+        image = (result - np.min(result)) / (np.max(result) - np.min(result))
+        image = (image * 255).astype('uint8')
+
+        colorfmt='rgb'
+        if image.shape[2] == 1:            
+            colorfmt='luminance'
+
+        texture = Texture.create(size=(image.shape[1], image.shape[0]), colorfmt=colorfmt)
+        texture.blit_buffer(image.tobytes(), colorfmt=colorfmt)
+        texture.flip_vertical()
+        texture.mag_filter = 'nearest'
+        self.imageout = texture
+
+    def take_snapshot(self):
+        snapshots = self.ids.av  
+
+        if self.denoise_enabled:
+            data = self.processedimagedata
+            self.processed = True
+        else:
+            data = self.preprocessedimagedata
+
+        if data is None:
+            return
+
+        compare = CompareExample(
+                icon='astrodenoisepy/data/color-palette-outline.png',
+                group='compare',
+                imagedata=data,
+                parameters={
+                    "Denoised": self.denoise_enabled,
+                    "STF.C": self.stfC,
+                    "STF.B": self.stfB,
+                    "ExpandLow": self.expand_low,
+                    "Model": self.selected_model
+                })
+
+        compare.bind(on_release=self.show_compare)
+        snapshots.add_widget(compare,3)        
 
 class MyZoomFloatLayout(AnchorLayout):
     region_x = NumericProperty(0)
@@ -473,10 +629,17 @@ class MyZoomFloatLayout(AnchorLayout):
         if touch.grab_current is self:
             touch.ungrab(self)
 
+class CompareExample(ActionToggleButton):
+    def __init__(self, imagedata=None, parameters=None, **kwargs):
+        super(CompareExample, self).__init__(**kwargs)
+        self.imagedata = imagedata
+        self.parameters = parameters
+
 class AstroDenoisePyGUIApp(App):
     lastpath = StringProperty()
 
     def build(self):
+        self.title = f"AstroDenoisePy - v{astrodenoisepyguiversion.version}"
         Window.bind(on_request_close=self.window_request_close)
         
         Window.left = self.config.getint('graphics', 'left')
@@ -489,10 +652,10 @@ class AstroDenoisePyGUIApp(App):
 
     def build_config(self, config):
         config.setdefaults('graphics', {
-            'height': 1024,
-            'width': 1280,
-            'top': 200,
-            'left': 200
+            'width': 1024,
+            'height': 768,
+            'top': 100,
+            'left': 100
         })
 
         config.setdefaults('astrodenoisepy', {
