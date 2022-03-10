@@ -28,7 +28,6 @@ import tensorflow as tf
 from csbdeep.data import NoNormalizer, STFNormalizer, PadAndCropResizer
 from csbdeep.models import CARE
 from astrodeep.utils.fits import read_fits, write_fits
-from astrodeep.filedialogs import save_file_dialog, open_file_dialog
 from operator import itemgetter
 
 import astrodenoisepyguiversion
@@ -114,7 +113,7 @@ class MyFloatLayout(FloatLayout):
         self.process_trigger = Clock.create_trigger(self.process_now)
         self.bind(stfC=self.process_trigger, stfB=self.process_trigger,tilling=self.process_trigger,expand_low=self.process_trigger)
 
-    imageout = ObjectProperty(None)
+    imageout = ObjectProperty(None, allownone=True)
     filetoload = StringProperty()
     stfC = NumericProperty(-2.8)
     stfB = NumericProperty(0.25)
@@ -136,6 +135,7 @@ class MyFloatLayout(FloatLayout):
     def show_load(self):
         
         if isWindows():
+            from astrodeep.filedialogs import open_file_dialog
             path = open_file_dialog(
                 "Select FITS or TIFF image",
                 App.get_running_app().lastpath,
@@ -211,7 +211,7 @@ class MyFloatLayout(FloatLayout):
         self.rawimagedata = result
         self.fits_headers = headers
 
-        self.imageout = False
+        self.imageout = None
         self.processed = False
         self.preprocessed = False        
         self.process_now()
@@ -250,6 +250,7 @@ class MyFloatLayout(FloatLayout):
     def show_save(self):
 
         if isWindows():
+            from astrodeep.filedialogs import save_file_dialog
             path = save_file_dialog(
                         "Save FITS or TIFF image",
                         App.get_running_app().lastpath,
@@ -526,8 +527,8 @@ class MyZoomFloatLayout(AnchorLayout):
     region_w = NumericProperty(0)
     region_h = NumericProperty(0)
     scale = NumericProperty(1)
-    imageoutzoom = ObjectProperty(None)
-    imageout = ObjectProperty(None)
+    imageoutzoom = ObjectProperty(None, allownone=True)
+    imageout = ObjectProperty(None, allownone=True)
 
     def on_imageout(self, instance, value):                
         if value:
@@ -593,15 +594,16 @@ class MyZoomFloatLayout(AnchorLayout):
         else:
             touch.grab(self)            
 
-        if self.imageout is not None:
-            self.imageoutzoom.texture = self.imageout.get_region(self.region_x, self.region_y, self.region_w, self.region_h)
+        self.imageoutzoom.texture = self.imageout.get_region(self.region_x, self.region_y, self.region_w, self.region_h)
        
         return True
-        #super().on_touch_down(touch)
 
     def on_touch_move(self, touch):
         if not self.collide_point(*touch.pos):
             return super().on_touch_move(touch)
+
+        if self.imageout is None:
+            return True
 
         if touch.grab_current is self:
 
@@ -617,17 +619,17 @@ class MyZoomFloatLayout(AnchorLayout):
             if (new_y >= 0) and (new_y + self.region_h <= self.imageout.height):
                 self.region_y += deltay
 
-            if self.imageout is not None:
-                self.imageoutzoom.texture = self.imageout.get_region(self.region_x, self.region_y, self.region_w, self.region_h)
+            self.imageoutzoom.texture = self.imageout.get_region(self.region_x, self.region_y, self.region_w, self.region_h)
 
         return True
-        #super().on_touch_move(touch)
 
     def on_touch_up(self, touch):
         super().on_touch_move(touch)
         
         if touch.grab_current is self:
             touch.ungrab(self)
+        
+        return True
 
 class CompareExample(ActionToggleButton):
     def __init__(self, imagedata=None, parameters=None, **kwargs):
