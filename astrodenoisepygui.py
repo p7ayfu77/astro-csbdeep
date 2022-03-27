@@ -1,5 +1,5 @@
 import kivy
-kivy.require('2.0.0')
+kivy.require('2.1.0')
 from kivy.app import App
 from kivy.uix.floatlayout import FloatLayout
 from kivy.uix.anchorlayout import AnchorLayout
@@ -17,11 +17,13 @@ from kivy.clock import Clock
 import os
 import sys
 import signal
+import time
 import traceback
 import threading
 from pathlib import Path
 
 import numpy as np
+import tqdm
 from tifffile import imread, imsave
 from astropy.io import fits
 import tensorflow as tf
@@ -112,14 +114,16 @@ class MyFloatLayout(FloatLayout):
         self.fits_headers = None
         self.process_trigger = Clock.create_trigger(self.process_now)
         self.bind(stfC=self.process_trigger, stfB=self.process_trigger,tilling=self.process_trigger,expand_low=self.process_trigger)
+        self.stop_event = threading.Event()
+        self.processthread = None
 
     imageout = ObjectProperty(None, allownone=True)
     filetoload = StringProperty()
     stfC = NumericProperty(-2.8)
     stfB = NumericProperty(0.25)
-    tilling  = NumericProperty(2)
+    tilling  = NumericProperty(3)
     sizing  = NumericProperty(1)
-    expand_low = NumericProperty(0)
+    expand_low = NumericProperty(0.9)
     denoise_enabled = BooleanProperty(False)
     normalize_enabled = BooleanProperty(True)
     autoupdate_enabled = BooleanProperty(True)
@@ -175,8 +179,7 @@ class MyFloatLayout(FloatLayout):
             if not isWindows():
                 self.dismiss_popup()
 
-        self.sizing = 1
-        self.denoise_enabled = False
+        self.sizing = 1        
         self.load_now()
 
     def load_now(self):
@@ -214,7 +217,8 @@ class MyFloatLayout(FloatLayout):
         self.imageout = None
         self.processed = False
         self.preprocessed = False        
-        self.process_now()
+        self.denoise_enabled = False
+        self.process_trigger()
 
     def load_file_data(self, path):
 
@@ -322,19 +326,19 @@ class MyFloatLayout(FloatLayout):
     def on_expand_low(self, instance, value):
         self.expand_low = value
         self.processed = False
-        self.preprocessed = False        
+        #self.preprocessed = False        
 
     def on_tilling(self, instance, value):
         self.tilling = value
         self.processed = False
-        self.preprocessed = False        
+        #self.preprocessed = False        
 
     def reset_sliders(self):
         self.processed = False
-        self.preprocessed = False        
+        #self.preprocessed = False
         self.stfC = -2.8
         self.stfB = 0.25
-        self.expand_low = 0
+        #self.expand_low = 0.9
 
     def denoise_check(self, instance, value):        
         self.denoise_enabled = value
@@ -390,12 +394,23 @@ class MyFloatLayout(FloatLayout):
         elif self.preprocessedimagedata is not None:
             self.process_result(self.preprocessedimagedata)
             return
+        
+        if self.processthread is not None and self.processthread.is_alive():
+            self.stop_event.set()            
+            with tqdm.tqdm(desc='Waiting for thread to stop...') as waiter_loger:
+                wait_count = 0
+                while self.processthread.is_alive():
+                    wait_count += 1
+                    time.sleep(0.1)
+                    waiter_loger.update(wait_count)
+
+        self.stop_event.clear() 
 
         Window.set_system_cursor('wait')
 
-        processthread = threading.Thread(target=self.process_callback)
+        self.processthread = threading.Thread(target=self.process_callback)
         threading.excepthook = self.process_exception_callback
-        processthread.start()
+        self.processthread.start()
     
     def process_exception_callback(self,args):
         e = args[1]
@@ -407,8 +422,9 @@ class MyFloatLayout(FloatLayout):
 
     def process_callback(self):
         result = self.process(self.rawimagedata,self.stfC,self.stfB)
-        #(1417, 2073, 3)
-        self.process_result(result)
+        
+        if result is not None:
+            self.process_result(result)
 
     @mainthread
     def process_result(self,result):
@@ -442,8 +458,8 @@ class MyFloatLayout(FloatLayout):
     def process(self, data, C=-2.8,B=0.25):
 
         self.update_progress(0)
-
-        normalizer = STFNormalizer(C=C,B=B,expand_low=self.expand_low,do_after=False) if self.normalize_enabled else NoNormalizer(expand_low=self.expand_low)
+        expand_low_actual = 0.5 - (self.expand_low/2)
+        normalizer = STFNormalizer(C=C,B=B,expand_low=expand_low_actual,do_after=False) if self.normalize_enabled else NoNormalizer(expand_low=expand_low_actual)
 
         if self.denoise_enabled:
             with tf.device(f"/{self.selected_device}:0"):
@@ -451,6 +467,8 @@ class MyFloatLayout(FloatLayout):
                 model = CARE(config=None, name=self.selected_model, basedir=self.models_basedir)
                 output_denoised = []
                 for i, c in enumerate(data):
+                    if self.stop_event.is_set():
+                        return None
                     output_denoised.append(
                         model.predict(c, axes, normalizer=normalizer,resizer=PadAndCropResizer(), n_tiles = (self.tilling,self.tilling))
                         )

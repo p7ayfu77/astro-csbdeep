@@ -59,6 +59,19 @@ def loss_mse(mean=True):
             return R(K.square(y_pred[:,:n,...] - y_true))
         return mse
 
+def loss_hdr2(mean=True):
+    R = _mean_or_not(mean)
+    if backend_channels_last():
+        def hdr2(y_true, y_pred):
+            n = K.shape(y_true)[-1]
+            return R(K.abs(K.tanh(y_pred[...,:n])-K.tanh(y_true)))
+        return hdr2
+    else:
+        def hdr2(y_true, y_pred):
+            n = K.shape(y_true)[1]
+            return R(K.abs(K.tanh(y_pred[:,:n,...])-K.tanh(y_true)))
+        return hdr2
+
 def loss_hdr(mean=True):
     R = _mean_or_not(mean)
     if backend_channels_last():

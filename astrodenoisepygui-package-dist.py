@@ -6,7 +6,8 @@ build_exe_options = {
     "packages": ["kivy"],
     "include_files": [
         "LICENSE.txt",
-        ["astrodenoisepy\\dist-models\\main", "models\\default"],
+        ["astrodenoisepy\\dist-models\\v0.4.0-01", "models\\default"],
+        ["astrodenoisepy\\dist-models\\v0.3.0-01", "models\\v0.3.0-01"],
         ["astrodenoisepy\\data", "astrodenoisepy\\data"],
         "astrodenoisepygui.kv",
         #angle
@@ -17,7 +18,7 @@ build_exe_options = {
         ".venv\\share\\glew\\bin\\glew32.dll",
         #sdl2
         ".venv\\share\\sdl2\\bin\\libFLAC-8.dll",
-        ".venv\\share\\sdl2\\bin\\libfreetype-6.dll",
+        #".venv\\share\\sdl2\\bin\\libfreetype-6.dll",
         ".venv\\share\\sdl2\\bin\\libjpeg-9.dll",
         ".venv\\share\\sdl2\\bin\\libmodplug-1.dll",
         ".venv\\share\\sdl2\\bin\\libmpg123-0.dll",

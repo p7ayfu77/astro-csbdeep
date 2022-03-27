@@ -1,4 +1,4 @@
-#:kivy 2.0.0
+#:kivy 2.1.0
 #:import utils kivy.utils
 #:import np numpy
 #:import Path pathlib.Path
@@ -146,21 +146,6 @@ Root:
                             text: '{:.3f}'.format(s2.value)
                             on_text_validate: main.stfB = '{:.3f}'.format(np.clip(float(self.text),s2.min,s2.max))
                             input_filter: 'float'
-                SliderToolLayout:
-                    ToolLabel:
-                        text: 'Expand Low'
-                    BoxLayout:                    
-                        MySlider:
-                            id: s5
-                            min: 0
-                            max: 0.5
-                            value: main.expand_low
-                            step: 0.01
-                            on_slider_release: main.expand_low = self.value
-                        MySliderTextInput:
-                            text: '{:.3f}'.format(s5.value)
-                            on_text_validate: main.expand_low = '{:.3f}'.format(np.clip(float(self.text),s5.min,s5.max))
-                            input_filter: 'float'
                 SliderToolLayout1:
                     ToolLabel:
                         text: 'Denoise Model'
@@ -175,6 +160,21 @@ Root:
                         valign: 'middle'
                         padding_x: '5dp'
                         text_size: self.size
+                SliderToolLayout1:
+                    ToolLabel:
+                        text: 'Denoise Strength'
+                    BoxLayout:                    
+                        MySlider:
+                            id: s5
+                            min: 0
+                            max: 1
+                            value: main.expand_low
+                            step: 0.01
+                            on_slider_release: main.expand_low = self.value
+                        MySliderTextInput:
+                            text: '{:.3f}'.format(s5.value)
+                            on_text_validate: main.expand_low = '{:.3f}'.format(np.clip(float(self.text),s5.min,s5.max))
+                            input_filter: 'float'
                 SliderToolLayout1:
                     ToolLabel:
                         text: 'Denoise Tiling'
@@ -236,12 +236,15 @@ Root:
                         id: my_widget_process
                         text: "Process"
                         on_release: root.start_process()
-                ProgressBar:
-                    id: pb
-                    size_hint_x: .5
-                    size_hint_y: None
-                    height: '5dp'
-                    value_normalized: main.progress
+                SliderToolLayout1:
+                    ToolLabel:
+                        text: 'Denoise Progress'
+                    ProgressBar:
+                        id: pb
+                        size_hint_x: .5
+                        size_hint_y: None
+                        height: '5dp'
+                        value_normalized: main.progress
                 HSeparator:
                     rgba: 1, 1, 1, 0
                     height: dp(10)
