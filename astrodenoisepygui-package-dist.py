@@ -3,7 +3,7 @@ from cx_Freeze import setup, Executable
 
 build_exe_options = {
     "build_exe": "astrodenoisepy\\dist-gui",
-    "packages": ["kivy"],
+    "packages": ["kivy","imagecodecs"],
     "include_files": [
         "LICENSE.txt",
         ["astrodenoisepy\\dist-models\\v0.4.0-01", "models\\default"],
