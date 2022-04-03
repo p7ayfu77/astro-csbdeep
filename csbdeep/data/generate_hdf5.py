@@ -268,6 +268,45 @@ def hdf5_copy_shuffle(tempfile,outfile,datashape=None,chunks=None):
             for k in iter(Y_dset.attrs):
                 Y.attrs[k] = Y_dset.attrs[k]
 
+def hdf5_concat_shuffle(src1file, src2file, dstfile, chunk_samples=256):
+    
+    with h5py.File(src1file, 'r') as hdf5src1:
+        X_src1 = hdf5src1['X']
+        Y_src1 = hdf5src1['Y']
+
+        with h5py.File(src2file, 'r') as hdf5src2:
+            X_src2 = hdf5src2['X']
+            Y_src2 = hdf5src2['Y']
+
+            len(X_src1) == len(Y_src1) or _raise(ValueError(f"X and Y must have same length: {src1file}"))
+            len(X_src2) == len(Y_src2) or _raise(ValueError(f"X and Y must have same length: {src2file}"))            
+            X_src1.shape[1:] == X_src2.shape[1:] or _raise(ValueError(f"X in {src1file} and {src2file} must have same non-ordinal shape"))
+            Y_src1.shape[1:] == Y_src2.shape[1:] or _raise(ValueError(f"Y in {src1file} and {src2file} must have same non-ordinal shape"))
+
+            comb_shape = ((X_src1.shape[0] + X_src2.shape[0],) + X_src1.shape[1:])
+
+            parent_path = Path(src1file).parent
+            with tempfile.NamedTemporaryFile(dir=parent_path) as temporaryFile:
+                temporaryFileName = temporaryFile.name
+
+            print("Creating temporaty Virtual Datasets in: ", temporaryFileName)
+            print("Virtual Datasets Shape: ", comb_shape)
+
+            with h5py.File(temporaryFileName, 'w', libver='latest') as f:
+
+                X_layout = h5py.VirtualLayout(shape=comb_shape, dtype='float32')
+                X_layout[0:len(X_src1),...] = h5py.VirtualSource(src1file, 'X', shape=X_src1.shape)
+                X_layout[len(X_src1):len(X_src1)+len(X_src2),...] = h5py.VirtualSource(src2file, 'X', shape=X_src2.shape)
+                f.create_virtual_dataset('X', X_layout)
+
+                Y_layout = h5py.VirtualLayout(shape=comb_shape, dtype='float32')
+                Y_layout[0:len(Y_src1),...] = h5py.VirtualSource(src1file, 'Y', shape=X_src1.shape)
+                Y_layout[len(Y_src1):len(Y_src1)+len(Y_src2),...] = h5py.VirtualSource(src2file, 'Y', shape=X_src2.shape)
+                f.create_virtual_dataset('Y', Y_layout)
+
+            out_chunks=((chunk_samples,) + X_src1.shape[1:])
+            hdf5_copy_shuffle(temporaryFileName,dstfile,datashape=comb_shape,chunks=out_chunks)
+            os.remove(temporaryFileName)
 
 # Data Wrapper
 
