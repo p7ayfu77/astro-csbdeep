@@ -12,7 +12,7 @@ Please see the documentation at http://csbdeep.bioimagecomputing.com/doc/.
 
 You will need a few things to get started:
 
-1. An NVIDIA GPU and relevant CUDA libraries installed - great video guide here [Install Tensorflow GPU and PyTorch in Windows 10 - Generalized method](https://www.youtube.com/watch?v=86Mq-h8tazc)
+1. An NVIDIA GPU is recommended and relevant CUDA libraries installed - great video guide here [Install Tensorflow GPU and PyTorch in Windows 10 - Generalized method](https://www.youtube.com/watch?v=86Mq-h8tazc). Astro CSBDeep can be run using only a CPU but it may be slow.
 2. Python 3 installed
 3. Create and venv environment preferabley named `.venv` by running `python -m venv .venv` and activating it `.venv\Scripts\activate`
 3. Install the pip3 requirement found in the `requirements.txt` file by running `pip3 install -r requirements.txt`
@@ -60,6 +60,15 @@ Note if you dont see the the venv startup automatically in terminal just activat
 Open up the notebook `AstroNoise2Noise.ipynb` and configure the same python interpreter path `.venv` in the top right hand of the VS Code interface.
 
 Happy coding and clear skies!
+
+## Running on linux
+```
+python3 -m venv .venv
+. .venv/bin/activate
+pip install -r requirements.txt
+python3 ./astrodenoisypygui.py
+```
+When the gui loads, select the denoise model v0.4.0-01. 
 
 ## Contributors
 
