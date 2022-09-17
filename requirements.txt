@@ -1,5 +1,5 @@
-tensorflow-gpu==2.7.0
-keras==2.7.0
+tensorflow-gpu==2.8.0
+keras==2.8.0
 jupyter==1.0.0
 tensorboard==2.8.0
 astropy==5.0.1
@@ -10,3 +10,6 @@ six==1.16.0
 numpy==1.22.1
 numexpr==2.8.1
 imagecodecs==2022.2.22
+kivy==2.1.0
+protobuf==3.20.0
+scipy==1.9.1
