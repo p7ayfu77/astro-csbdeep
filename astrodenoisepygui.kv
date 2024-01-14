@@ -146,20 +146,23 @@ Root:
                             text: '{:.3f}'.format(s2.value)
                             on_text_validate: main.stfB = '{:.3f}'.format(np.clip(float(self.text),s2.min,s2.max))
                             input_filter: 'float'
-                SliderToolLayout1:
+                BoxLayout:                    
+                    canvas.before:
+                        Color:
+                            rgb: utils.get_color_from_hex("#233067")
+                        Rectangle:
+                            size: self.size
+                            pos: self.pos
+                    size_hint_y: None
+                    height: '32dp'
                     ToolLabel:
                         text: 'Denoise Model'
-                    Spinner:
-                        text: main.selected_model
-                        values: main.models
+                    Button:
                         size_hint_y: None
                         height: '32dp'
-                        on_text: root.update_model(self.text)
-                        shorten: True
-                        halign: 'left'
-                        valign: 'middle'
-                        padding_x: '5dp'
-                        text_size: self.size
+                        id: my_widget_process
+                        text: "Select..."
+                        on_release: root.select_model()
                 SliderToolLayout1:
                     ToolLabel:
                         text: 'Denoise Strength'

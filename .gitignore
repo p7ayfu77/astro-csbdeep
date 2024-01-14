@@ -15,6 +15,7 @@ docs/build/
 data/**
 example_data
 htmlcov/
+wandb/
 .coverage*
 *.npz
 *.tif*

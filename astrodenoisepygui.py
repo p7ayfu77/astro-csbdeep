@@ -123,7 +123,7 @@ class MyFloatLayout(FloatLayout):
     stfB = NumericProperty(0.25)
     tilling  = NumericProperty(3)
     sizing  = NumericProperty(1)
-    expand_low = NumericProperty(0.9)
+    expand_low = NumericProperty(0.5)
     denoise_enabled = BooleanProperty(False)
     normalize_enabled = BooleanProperty(True)
     autoupdate_enabled = BooleanProperty(True)
@@ -135,6 +135,25 @@ class MyFloatLayout(FloatLayout):
 
     def dismiss_popup(self):
         self._popup.dismiss()
+
+    def select_model(self):
+        models_path = Path(os.getcwd()).joinpath("models")
+
+        if isWindows():
+            from astrodeep.filedialogs import open_folder_dialog
+            result = open_folder_dialog(
+                "Select Model folder",
+                start_folder=str(models_path),
+                selected_folder=str(models_path.joinpath(self.selected_model)))
+                
+            if result is None:
+                return
+
+            self.selected_model = Path(result).name
+            self.processed = False
+            #self.preprocessed = False        
+            self.process_trigger()
+            #self.process_now()
 
     def show_load(self):
         
@@ -352,19 +371,22 @@ class MyFloatLayout(FloatLayout):
         
     def autoupdate_check(self, instance, value):
         self.autoupdate_enabled = value        
-        self.process_now()
+        self.process_trigger()
+        #self.process_now()
 
     def update_model(self,value):
         self.selected_model = value
         self.processed = False
-        self.preprocessed = False        
-        self.process_now()
+        #self.preprocessed = False        
+        self.process_trigger()
+        #self.process_now()
 
     def update_device(self,value):
         self.selected_device = value
         self.processed = False
-        self.preprocessed = False        
-        self.process_now()
+        #self.preprocessed = False
+        self.process_trigger()
+        #self.process_now()
 
     def on_sizing(self, instance, value):
         self.sizing = value
@@ -485,6 +507,7 @@ class MyFloatLayout(FloatLayout):
         if instance.state != 'down' and instance.last_touch.button == 'right':
             snapshots = self.ids.av
             snapshots.remove_widget(instance)
+            self.snapshotinfo = ""
             return
         elif instance.state != 'down' and instance.last_touch.button == 'left':
             self.process_trigger()
@@ -532,7 +555,7 @@ class MyFloatLayout(FloatLayout):
                     "Denoised": self.denoise_enabled,
                     "STF.C": self.stfC,
                     "STF.B": self.stfB,
-                    "ExpandLow": self.expand_low,
+                    "Denoise.Strength": self.expand_low,
                     "Model": self.selected_model
                 })
 

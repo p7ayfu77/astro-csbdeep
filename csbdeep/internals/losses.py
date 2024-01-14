@@ -7,6 +7,8 @@ import numpy as np
 from ..utils.tf import keras_import
 K = keras_import('backend')
 
+import tensorflow as tf
+
 def _mean_or_not(mean):
     # return (lambda x: K.mean(x,axis=(-1 if backend_channels_last() else 1))) if mean else (lambda x: x)
     # Keras also only averages over axis=-1, see https://github.com/keras-team/keras/blob/master/keras/losses.py
@@ -59,31 +61,6 @@ def loss_mse(mean=True):
             return R(K.square(y_pred[:,:n,...] - y_true))
         return mse
 
-def loss_hdr2(mean=True):
-    R = _mean_or_not(mean)
-    if backend_channels_last():
-        def hdr2(y_true, y_pred):
-            n = K.shape(y_true)[-1]
-            return R(K.abs(K.tanh(y_pred[...,:n])-K.tanh(y_true)))
-        return hdr2
-    else:
-        def hdr2(y_true, y_pred):
-            n = K.shape(y_true)[1]
-            return R(K.abs(K.tanh(y_pred[:,:n,...])-K.tanh(y_true)))
-        return hdr2
-
-def loss_hdr(mean=True):
-    R = _mean_or_not(mean)
-    if backend_channels_last():
-        def hdr(y_true, y_pred):
-            n = K.shape(y_true)[-1]
-            return K.sum(K.abs(K.tanh(y_pred[...,:n])-K.tanh(y_true)))
-        return hdr
-    else:
-        def hdr(y_true, y_pred):
-            n = K.shape(y_true)[1]
-            return K.sum(K.abs(K.tanh(y_pred[:,:n,...])-K.tanh(y_true)))
-        return hdr
 
 def loss_thresh_weighted_decay(loss_per_pixel, thresh, w1, w2, alpha):
     def _loss(y_true, y_pred):
@@ -94,3 +71,74 @@ def loss_thresh_weighted_decay(loss_per_pixel, thresh, w1, w2, alpha):
                       axis=(-1 if backend_channels_last() else 1))
     return _loss
 
+
+def loss_hdr(mean=True):
+    R = _mean_or_not(mean)
+    if backend_channels_last():
+        def hdr(y_true, y_pred):
+            n = K.shape(y_true)[-1]
+            return R(K.abs(K.tanh(y_pred[...,:n])-K.tanh(y_true)))
+        return hdr
+    else:
+        def hdr(y_true, y_pred):
+            n = K.shape(y_true)[1]
+            return R(K.abs(K.tanh(y_pred[:,:n,...])-K.tanh(y_true)))
+        return hdr
+
+
+def loss_msssim(mean=False):
+    power_factors=(0.0448, 0.2856, 0.3001)
+    if backend_channels_last():
+        def msssim(y_true, y_pred):
+            n = K.shape(y_true)[-1]
+            return  1 - tf.image.ssim_multiscale(img1=y_true, img2=y_pred[...,:n], max_val=1.0, power_factors=power_factors)
+        return msssim
+    else:
+        def msssim(y_true, y_pred):
+            n = K.shape(y_true)[1]
+            return 1 - tf.image.ssim_multiscale(img1=y_true, img2=y_pred[:,:n,...], max_val=1.0, power_factors=power_factors)
+        return msssim
+
+
+def loss_msssimhdr(mean=False):
+    alpha = 0.125
+    compensation=10.0
+    power_factors=(0.0448, 0.2856, 0.3001)
+    if backend_channels_last():
+        def msssimhdr(y_true, y_pred):
+            n = K.shape(y_true)[-1]
+            axis = tuple((d for d in range(K.ndim(y_true)) if d != 0))
+            ssim_loss = 1 - tf.image.ssim_multiscale(img1=y_true, img2=y_pred[...,:n], max_val=1.0, power_factors=power_factors)
+            l1_loss = K.mean(K.abs(K.tanh(y_pred[...,:n])-K.tanh(y_true)),axis=axis)
+            return compensation*(alpha * ssim_loss + l1_loss)
+        return msssimhdr
+    else:
+        def msssimhdr(y_true, y_pred):
+            n = K.shape(y_true)[1]
+            axis = tuple((d for d in range(K.ndim(y_true)) if d != 0))
+            ssim_loss = 1 - tf.image.ssim_multiscale(img1=y_true, img2=y_pred[:,:n,...], max_val=1.0, power_factors=power_factors)
+            l1_loss = K.mean(K.abs(K.tanh(y_pred[:,:n,...])-K.tanh(y_true)),axis=axis)
+            return compensation*(alpha * ssim_loss + l1_loss)
+        return msssimhdr
+
+
+def loss_msssiml1(mean=False):
+    alpha = 0.125
+    compensation= 1.0
+    power_factors=(0.0448, 0.2856, 0.3001)
+    if backend_channels_last():
+        def msssiml1(y_true, y_pred):
+            n = K.shape(y_true)[-1]
+            axis = tuple((d for d in range(K.ndim(y_true)) if d != 0))
+            ssim_loss = 1 - tf.image.ssim_multiscale(img1=y_true, img2=y_pred[...,:n], max_val=1.0, power_factors=power_factors)
+            l1_loss = K.mean(K.abs(y_pred[...,:n] - y_true),axis=axis)
+            return compensation*(alpha * ssim_loss + (1 - alpha) * l1_loss)
+        return msssiml1
+    else:
+        def msssiml1(y_true, y_pred):
+            n = K.shape(y_true)[1]
+            axis = tuple((d for d in range(K.ndim(y_true)) if d != 0))
+            ssim_loss = 1 - tf.image.ssim_multiscale(img1=y_true, img2=y_pred[:,:n,...], max_val=1.0, power_factors=power_factors)
+            l1_loss = K.mean(K.abs(y_pred[:,:n,...] - y_true),axis=axis)
+            return compensation*(alpha * ssim_loss + (1 - alpha) * l1_loss)
+        return msssiml1
