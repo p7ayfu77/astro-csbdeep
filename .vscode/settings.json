@@ -12,5 +12,6 @@
     },
     "jupyter.notebookFileRoot": "${workspaceFolder}",
     "python.defaultInterpreterPath": ".\\.venv\\Scripts\\python.exe",
-    "jupyter.debugJustMyCode": false
+    "jupyter.debugJustMyCode": false,
+    "python.analysis.typeCheckingMode": "basic"
 }

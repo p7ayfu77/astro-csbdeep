@@ -77,7 +77,7 @@ class BaseModel(object):
         try:
             get_model_details(cls, name_or_alias, verbose=True)
             return get_model_instance(cls, name_or_alias)
-        except ValueError:
+        except ValueError as e:
             if name_or_alias is not None:
                 print("Could not find model with name or alias '%s'" % (name_or_alias), file=sys.stderr)
                 sys.stderr.flush()
@@ -137,6 +137,7 @@ class BaseModel(object):
         if self.config is None:
             if config_file.exists():
                 config_dict = load_json(str(config_file))
+                config_dict = self._config_class.update_loaded_config(config_dict)
                 self.config = self._config_class(**config_dict)
                 if not self.config.is_valid():
                     invalid_attr = self.config.is_valid(True)[1]

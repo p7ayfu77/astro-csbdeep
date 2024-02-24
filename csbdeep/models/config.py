@@ -6,7 +6,7 @@ import numpy as np
 import argparse
 import warnings
 
-from distutils.version import LooseVersion
+from packaging.version import Version
 
 from ..utils.tf import keras_import
 keras = keras_import()
@@ -75,7 +75,24 @@ class BaseConfig(argparse.Namespace):
         for k in kwargs:
             setattr(self, k, kwargs[k])
 
+    @classmethod
+    def update_loaded_config(cls, config):
+        """Called by model to update loaded config dictionary before config object is created
 
+        Can be used to modify or introduce/delete parameters, e.g. to ensure
+        backwards compatibility after new parameters have been introduced.
+
+        Parameters
+        ----------
+        config : dict
+            dictionary of config parameters loaded from file
+
+        Returns
+        -------
+        updated_config: dict
+            an updated version of the config parameter dictionary
+        """
+        return config
 
 
 class Config(BaseConfig):
@@ -165,7 +182,8 @@ class Config(BaseConfig):
         self.train_tensorboard     = True
 
         # the parameter 'min_delta' was called 'epsilon' for keras<=2.1.5
-        min_delta_key = 'epsilon' if LooseVersion(keras.__version__)<=LooseVersion('2.1.5') else 'min_delta'
+        # keras.__version__ was removed in tensorflow 2.13.0
+        min_delta_key = 'epsilon' if Version(getattr(keras, '__version__', '9.9.9'))<=Version('2.1.5') else 'min_delta'
         self.train_reduce_lr       = {'factor': 0.5, 'patience': 10, min_delta_key: 0}
 
         # disallow setting 'n_dim' manually

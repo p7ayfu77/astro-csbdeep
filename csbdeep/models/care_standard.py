@@ -18,6 +18,9 @@ from ..data import Resizer, NoResizer, PadAndCropResizer
 from ..internals.predict import predict_tiled, tile_overlap, Progress, total_n_tiles
 from ..internals import nets, train
 
+from packaging.version import Version
+keras = keras_import()
+
 import tensorflow as tf
 # if IS_TF_1:
 #     import tensorflow as tf
@@ -106,7 +109,8 @@ class CARE(BaseModel):
         """
         if optimizer is None:
             Adam = keras_import('optimizers', 'Adam')
-            optimizer = Adam(learning_rate=self.config.train_learning_rate)
+            learning_rate = 'lr' if Version(getattr(keras, '__version__', '9.9.9')) < Version('2.3.0') else 'learning_rate'
+            optimizer = Adam(**{learning_rate: self.config.train_learning_rate})
         self.callbacks = train.prepare_model(self.keras_model, optimizer, self.config.train_loss, **kwargs)
 
         if self.basedir is not None:
@@ -131,7 +135,7 @@ class CARE(BaseModel):
         self._model_prepared = True
 
 
-    def train(self, X,Y, validation_data, epochs=None, steps_per_epoch=None):
+    def train(self, X,Y, validation_data, epochs=None, steps_per_epoch=None, augmenter=None):
         """Train the neural network with the given data.
 
         Parameters
@@ -186,7 +190,7 @@ class CARE(BaseModel):
                                                        log_dir=str(self.logdir/'logs'/'images'),
                                                        n_images=3, prob_out=self.config.probabilistic))
 
-        training_data = train.DataWrapper(X, Y, self.config.train_batch_size, length=epochs*steps_per_epoch)
+        training_data = train.DataWrapper(X, Y, self.config.train_batch_size, length=epochs*steps_per_epoch, augmenter=augmenter)
 
         fit = self.keras_model.fit_generator if IS_TF_1 else self.keras_model.fit
         history = fit(iter(training_data), validation_data=validation_data,
@@ -225,7 +229,7 @@ class CARE(BaseModel):
         print("\nModel exported in TensorFlow's SavedModel format:\n%s" % str(fname.resolve()))
 
 
-    def predict(self, img, axes, normalizer=PercentileNormalizer(), resizer=PadAndCropResizer(), n_tiles=None):
+    def predict(self, img, axes, normalizer:Normalizer = PercentileNormalizer(), resizer=PadAndCropResizer(), n_tiles=None):
         """Apply neural network to raw image to predict restored image.
 
         Parameters
@@ -329,7 +333,7 @@ class CARE(BaseModel):
         # _permute_axes_n_tiles: (img_axes_in <-> net_axes_in) to convert n_tiles between img and net axes
         def _permute_n_tiles(n,undo=False):
             # hack: move tiling axis around in the same way as the image was permuted by creating an array
-            return _permute_axes_n_tiles(np.empty(n,np.bool),undo=undo).shape
+            return _permute_axes_n_tiles(np.empty(n,bool),undo=undo).shape
 
         # to support old api: set scalar n_tiles value for the largest tiling axis
         if np.isscalar(n_tiles) and int(n_tiles)==n_tiles and 1<=n_tiles:

@@ -468,6 +468,7 @@ class ReinhardPreProcessor(PreProcessor):
     def do_after(self):
         return self._do_after
 
+
 import numexpr
 class STFPreProcessor(PreProcessor):
     """STF Pre-processing.

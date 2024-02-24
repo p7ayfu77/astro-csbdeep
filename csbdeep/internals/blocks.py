@@ -63,6 +63,7 @@ def unet_block(n_depth=2, n_filter_base=16, kernel_size=(3,3), n_conv_per_depth=
                last_activation=None,
                pool=(2,2),
                kernel_init="glorot_uniform",
+               expansion=2,
                prefix=''):
 
     if len(pool) != len(kernel_size):
@@ -90,7 +91,7 @@ def unet_block(n_depth=2, n_filter_base=16, kernel_size=(3,3), n_conv_per_depth=
         # down ...
         for n in range(n_depth):
             for i in range(n_conv_per_depth):
-                layer = conv_block(n_filter_base * 2 ** n, *kernel_size,
+                layer = conv_block(int(n_filter_base * expansion ** n), *kernel_size,
                                    dropout=dropout,
                                    activation=activation,
                                    init=kernel_init,
@@ -100,13 +101,13 @@ def unet_block(n_depth=2, n_filter_base=16, kernel_size=(3,3), n_conv_per_depth=
 
         # middle
         for i in range(n_conv_per_depth - 1):
-            layer = conv_block(n_filter_base * 2 ** n_depth, *kernel_size,
+            layer = conv_block(int(n_filter_base * expansion ** n_depth), *kernel_size,
                                dropout=dropout,
                                init=kernel_init,
                                activation=activation,
                                batch_norm=batch_norm, name=_name("middle_%s" % i))(layer)
 
-        layer = conv_block(n_filter_base * 2 ** max(0, n_depth - 1), *kernel_size,
+        layer = conv_block(int(n_filter_base * expansion ** max(0, n_depth - 1)), *kernel_size,
                            dropout=dropout,
                            activation=activation,
                            init=kernel_init,
@@ -116,13 +117,13 @@ def unet_block(n_depth=2, n_filter_base=16, kernel_size=(3,3), n_conv_per_depth=
         for n in reversed(range(n_depth)):
             layer = Concatenate(axis=channel_axis)([upsampling(pool)(layer), skip_layers[n]])
             for i in range(n_conv_per_depth - 1):
-                layer = conv_block(n_filter_base * 2 ** n, *kernel_size,
+                layer = conv_block(int(n_filter_base * expansion ** n), *kernel_size,
                                    dropout=dropout,
                                    init=kernel_init,
                                    activation=activation,
                                    batch_norm=batch_norm, name=_name("up_level_%s_no_%s" % (n, i)))(layer)
 
-            layer = conv_block(n_filter_base * 2 ** max(0, n - 1), *kernel_size,
+            layer = conv_block(int(n_filter_base * expansion ** max(0, n - 1)), *kernel_size,
                                dropout=dropout,
                                init=kernel_init,
                                activation=activation if n > 0 else last_activation,
@@ -135,7 +136,11 @@ def unet_block(n_depth=2, n_filter_base=16, kernel_size=(3,3), n_conv_per_depth=
 
 
 def resnet_block(n_filter, kernel_size=(3,3), pool=(1,1), n_conv_per_block=2,
-                 batch_norm=False, kernel_initializer='he_normal', activation='relu'):
+                 batch_norm=False, kernel_initializer='he_normal', activation='relu',
+                 last_conv_bias_if_batch_norm=False):
+    """
+    The default value for 'last_conv_bias_if_batch_norm' is 'False' for legacy reasons only.
+    """
 
     n_conv_per_block >= 2 or _raise(ValueError('required: n_conv_per_block >= 2'))
     len(pool) == len(kernel_size) or _raise(ValueError('kernel and pool sizes must match.'))
@@ -145,29 +150,33 @@ def resnet_block(n_filter, kernel_size=(3,3), pool=(1,1), n_conv_per_block=2,
     conv_layer = Conv2D if n_dim == 2 else Conv3D
     conv_kwargs = dict (
         padding            = 'same',
-        use_bias           = not batch_norm,
         kernel_initializer = kernel_initializer,
     )
     channel_axis = -1 if backend_channels_last() else 1
 
     def f(inp):
-        x = conv_layer(n_filter, kernel_size, strides=pool, **conv_kwargs)(inp)
+        # first conv to prepare filter sizes and strides...
+        x = conv_layer(n_filter, kernel_size, strides=pool, use_bias=not batch_norm, **conv_kwargs)(inp)
         if batch_norm:
             x = BatchNormalization(axis=channel_axis)(x)
         x = Activation(activation)(x)
 
+        # middle conv
         for _ in range(n_conv_per_block-2):
-            x = conv_layer(n_filter, kernel_size, **conv_kwargs)(x)
+            x = conv_layer(n_filter, kernel_size, use_bias=not batch_norm, **conv_kwargs)(x)
             if batch_norm:
                 x = BatchNormalization(axis=channel_axis)(x)
             x = Activation(activation)(x)
 
-        x = conv_layer(n_filter, kernel_size, **conv_kwargs)(x)
+        # last conv with no activation for residual addition
+        x = conv_layer(n_filter, kernel_size, use_bias=not batch_norm, **conv_kwargs)(x)
         if batch_norm:
             x = BatchNormalization(axis=channel_axis)(x)
 
+        # transform input if not compatible...
         if any(p!=1 for p in pool) or n_filter != K.int_shape(inp)[-1]:
-            inp = conv_layer(n_filter, (1,)*n_dim, strides=pool, **conv_kwargs)(inp)
+            last_conv_bias = last_conv_bias_if_batch_norm if batch_norm else True
+            inp = conv_layer(n_filter, (1,)*n_dim, strides=pool, use_bias=last_conv_bias, **conv_kwargs)(inp)
 
         x = Add()([inp, x])
         x = Activation(activation)(x)
