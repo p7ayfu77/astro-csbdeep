@@ -148,27 +148,28 @@ class ImageViewLayout(AnchorLayout):
 
                 image_x = int(pixel_x * self.region_w / childImageNormImageSize_x)
                 #image_y = pixel_y * self.region_h / childImageNormImageSize_y
-
-                mixtexture = Texture.create(size=(self.region_w, self.region_h), colorfmt=self.imageout.colorfmt)
                 
-                mixtexture.blit_buffer(
-                    self.imageout.get_region(self.region_x + image_x, self.region_y, self.region_w - image_x, self.region_h).pixels,
-                    pos=(image_x, 0), 
-                    size=(self.region_w - image_x, self.region_h),
-                    bufferfmt='ubyte',
-                    colorfmt='rgba')
+                if image_x > 0 and image_x < self.region_w:
+                    mixtexture = Texture.create(size=(self.region_w, self.region_h), colorfmt=self.imageout.colorfmt)
+                    
+                    mixtexture.blit_buffer(
+                        self.imageout.get_region(self.region_x + image_x, self.region_y, self.region_w - image_x, self.region_h).pixels,
+                        pos=(image_x, 0), 
+                        size=(self.region_w - image_x, self.region_h),
+                        bufferfmt='ubyte',
+                        colorfmt='rgba')
 
-                mixtexture.blit_buffer(
-                    self.imageorig.get_region(self.region_x, self.region_y, image_x, self.region_h).pixels,
-                    pos=(0,0), 
-                    size=(image_x, self.region_h),
-                    bufferfmt='ubyte',
-                    colorfmt='rgba')                                
-                
-                mixtexture.flip_vertical()
-                mixtexture.mag_filter = 'linear'
-                mixtexture.min_filter = 'linear'
-                self.displayimage.texture = mixtexture
+                    mixtexture.blit_buffer(
+                        self.imageorig.get_region(self.region_x, self.region_y, image_x, self.region_h).pixels,
+                        pos=(0,0), 
+                        size=(image_x, self.region_h),
+                        bufferfmt='ubyte',
+                        colorfmt='rgba')                                
+                    
+                    mixtexture.flip_vertical()
+                    mixtexture.mag_filter = 'linear'
+                    mixtexture.min_filter = 'linear'
+                    self.displayimage.texture = mixtexture
 
         return True
 
