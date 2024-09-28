@@ -166,9 +166,7 @@ function AstroDenoiseCLI() {
    function getCLICommand(imagePath) {
 
       imagePath = File.unixPathToWindows(imagePath);
-      //python -m D:\pydeep\astro-csbdeep\astrodenoise.main
-      //var cmdLine = '"AstroDenoise" ' +
-      var cmdLine = '"D:\\pydeep\\astro-csbdeep\\build\\AstroDenoise\\AstroDenoise" ' +
+      var cmdLine = '"AstroDenoise" ' +
          '"' + imagePath + '"';
 
       if (astrodnParameters.strength != 0.5)
