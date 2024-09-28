@@ -85,7 +85,9 @@ class NoNormalizer(Normalizer):
 
     def after(self, mean, scale, axes):
         self.do_after or _raise(ValueError())
-        return mean, scale
+        
+        x = mean - self.expand_low
+        return x, scale
 
     @property
     def do_after(self):
@@ -196,16 +198,13 @@ class STFNormalizer(Normalizer):
         _x, self.m, self.c = STFPreProcessor.stf(x, self.C, self.B, axis)
         return _x + self.expand_low
 
-    def norm(self,data):
-        return (data - np.min(data)) / (np.max(data) - np.min(data))
-
     def after(self, mean, scale, axes):
-        self.do_after or _raise(ValueError())        
+        self.do_after or _raise(ValueError())      
         
-        # Mean requires normalising to [0,1] range else produces harsh clipping
-        mean = self.norm(mean)
-
-        x_ = STFPreProcessor.rev_stf(mean,self.m,self.c)
+        x_ = mean - self.expand_low
+        # Clip mean to [0,1] range
+        x_ = np.clip(x_,0,1)
+        x_ = STFPreProcessor.rev_stf(x_,self.m,self.c)
 
         return x_, scale
 
