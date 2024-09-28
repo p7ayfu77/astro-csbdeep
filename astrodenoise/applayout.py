@@ -296,7 +296,7 @@ class AppLayout(FloatLayout,EventDispatcher):
             self.dismiss_popup()
         
         filepath = Path(path)
-        #AstroDeNoiseApp()
+        
         get_app(App.get_running_app()).lastpath = str(filepath.parent)
 
         if self.fits_headers is None:
@@ -317,14 +317,19 @@ class AppLayout(FloatLayout,EventDispatcher):
         else:
             result_tosave = np.array(self.currentimage.get_data('pre')[0])
 
+        # Clip to range [0,1] before save
+        result_tosave = np.clip(result_tosave, 0, 1)
+        
         try:
             extension = filepath.suffix.lower()
 
             if extension in supported_save_formats_fits:
-                result_forsave = np.moveaxis(np.transpose(result_tosave),1,2)
-                write_fits(filepath,result_forsave,headers=self.fits_headers)
+                write_fits(
+                    filepath,
+                    np.moveaxis(np.transpose(result_tosave),1,2),
+                    headers=self.fits_headers)
             elif extension in supported_save_formats_tiff:
-                result_tosave = (result_tosave - np.min(result_tosave)) / (np.max(result_tosave) - np.min(result_tosave))
+                # Scale to unit16 for tiff
                 result_tosave = (result_tosave * np.iinfo(np.uint16).max).astype(np.uint16)
                 imsave(filepath,data=result_tosave)
             else:
@@ -459,7 +464,11 @@ class AppLayout(FloatLayout,EventDispatcher):
 
         self.update_progress(0)
         expand_low_actual = 0.5 - (self.expand_low/2)
-        normalizer = STFNormalizer(C=C,B=B,expand_low=expand_low_actual,do_after=False) if self.normalize_enabled else NoNormalizer(expand_low=expand_low_actual)
+        # Strength shifts pixel values to right of histogram by up to 0.5
+        #Strength=1 => Image + 0
+        #Strength=0 => Image + 0.5
+        normalizer = STFNormalizer(C=C,B=B,expand_low=expand_low_actual,do_after=False) if self.normalize_enabled else NoNormalizer(expand_low=expand_low_actual,do_after=False)
+        
 
         if self.denoise_enabled:
             with tf.device(f"/{self.selected_device}:0"):
@@ -478,7 +487,7 @@ class AppLayout(FloatLayout,EventDispatcher):
             result = normalizer.before(np.moveaxis(np.transpose(data),0,1),'YX')
             self.update_progress(1)
 
-        return result 
+        return result - expand_low_actual
 
     @mainthread
     def update_progress(self,progress):
@@ -526,8 +535,9 @@ class AppLayout(FloatLayout,EventDispatcher):
         }
 
     def get_texture(self, result):
-        image = (result - np.min(result)) / (np.max(result) - np.min(result))
-        image = (image * 255).astype('uint8')
+        
+        result = np.clip(result, 0, 1)
+        image = (result * 255).astype('uint8')
 
         colorfmt='rgb'
         if image.shape[2] == 1:            
